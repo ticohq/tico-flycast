@@ -130,8 +130,9 @@ public:
 			}
 			sampler = (VkSampler)*linearSampler;
 		}
-		ImTextureID texId = vkTex.textureId = ImGui_ImplVulkan_AddTexture(sampler, (VkImageView)vkTex.texture->GetImageView(),
+		VkDescriptorSet descSet = ImGui_ImplVulkan_AddTexture(sampler, (VkImageView)vkTex.texture->GetImageView(),
 				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		ImTextureID texId = vkTex.textureId = (ImTextureID)(uintptr_t)descSet;
 		// TODO update existing texture
 		//auto it = textures.find(name);
 		//if (it != textures.end() && it->second.texture != nullptr)
@@ -156,7 +157,7 @@ public:
 				}
 				VkDescriptorSet descSet;
 			};
-			getContext()->addToFlight(new DescSetDeleter((VkDescriptorSet)it->second.textureId));
+			getContext()->addToFlight(new DescSetDeleter((VkDescriptorSet)(uintptr_t)it->second.textureId));
 			if (it->second.texture != nullptr)
 				it->second.texture->deferDeleteResource(getContext());
 			textures.erase(it);

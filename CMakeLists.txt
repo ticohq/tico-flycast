@@ -65,6 +65,8 @@ option(USE_VULKAN "Build with Vulkan support" ON)
 option(USE_DX9 "Build with Direct3D 9 support" ON)
 option(USE_DX11 "Build with Direct3D 11 support" ON)
 option(LIBRETRO "Build libretro core" OFF)
+option(USE_TICO "Build with tico Switch UI/runtime" OFF)
+option(DISABLE_LOGGING "Disable all logging" OFF)
 option(USE_OPENGL "Use OpenGL API" ON)
 option(USE_VIDEOCORE "RPI: use the legacy Broadcom GLES libraries" OFF)
 option(USE_ALSA "Build with ALSA support" ON)
@@ -78,6 +80,10 @@ option(ENABLE_DC_PROFILER "Build with support for target machine (SH4) profiler"
 option(ENABLE_FC_PROFILER "Build with support for host app (Flycast) profiler" OFF)
 option(USE_DISCORD "Use Discord Presence API" OFF)
 option(USE_LIBCDIO "Use libcdio for CDROM access" OFF)
+
+if(DISABLE_LOGGING)
+	add_compile_definitions(DISABLE_LOGGING)
+endif()
 
 if(IOS AND NOT LIBRETRO)
 	set(USE_VULKAN OFF CACHE BOOL "Force vulkan off" FORCE)
@@ -131,18 +137,118 @@ string(TIMESTAMP BUILD_TIMESTAMP UTC)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/core/version.h.in" "${CMAKE_CURRENT_SOURCE_DIR}/core/version.h" @ONLY)
 
 if(NINTENDO_SWITCH)
-	set(USE_VULKAN OFF)
+	# Tico builds use Vulkan via NVK. The multi-core libretro static-lib
+	# build still needs Vulkan disabled (no NVK), so keep the OFF default
+	# unless we're building a tico NRO.
+	if(USE_TICO)
+		set(USE_VULKAN ON CACHE BOOL "Build with Vulkan support" FORCE)
+		# No Mesa GL/EGL on the tico-Vulkan build - the GL renderer sources
+		# (core/rend/gles/*, core/wsi/gl_context.cpp, glsm/glsym) would
+		# otherwise be compiled and fail to find any GL symbols.
+		set(USE_OPENGL OFF CACHE BOOL "Use OpenGL API" FORCE)
+	else()
+		set(USE_VULKAN OFF)
+	endif()
 	enable_language(ASM)
 
 	if(LIBRETRO)
-		add_library(${PROJECT_NAME} STATIC core/emulator.cpp)
-		target_compile_definitions(${PROJECT_NAME} PRIVATE LIBRETRO HAVE_LIBNX HAVE_OPENGL HAVE_OIT)
-		find_path(GLEXT_H_INCLUDE_DIR NAMES GL/glext.h REQUIRED)
-		target_include_directories(${PROJECT_NAME} PRIVATE ${GLEXT_H_INCLUDE_DIR})
-		set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "flycast_libretro_libnx")
-		set(CMAKE_STATIC_LIBRARY_PREFIX "")
+		if(USE_TICO)
+			# Build as executable with tico overlay UI
+			add_executable(${PROJECT_NAME} tico/TicoMain.cpp)
+			target_compile_definitions(${PROJECT_NAME} PRIVATE
+				LIBRETRO HAVE_LIBNX USE_TICO USE_SDL USE_SDL_AUDIO
+				HAVE_VULKAN VK_USE_PLATFORM_VI_NN
+				IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS IMGUI_DEFINE_MATH_OPERATORS
+				IMGUI_IMPL_VULKAN_NO_PROTOTYPES TICO_VULKAN_OVERLAY)
+
+			# tico Vulkan frontend + libretro driver glue.
+			target_sources(${PROJECT_NAME} PRIVATE
+				tico/TicoCore.cpp
+				tico/TicoOverlay.cpp
+				tico/TicoVulkan.cpp
+				tico/TicoTranslationManager.cpp
+				tico/TicoStubs.cpp
+				core/emulator.cpp
+				shell/libretro/audiostream.cpp
+				shell/switch/libnx_vmem.cpp
+				shell/switch/context_switch.S)
+			target_include_directories(${PROJECT_NAME} PRIVATE
+				tico
+				shell/libretro
+				shell/switch)
+
+			# SDL2 for Switch (provided by devkitPro). Used for audio +
+			# gamecontroller; we no longer create an SDL window.
+			find_package(SDL2 REQUIRED)
+			target_include_directories(${PROJECT_NAME} PRIVATE ${SDL2_INCLUDE_DIRS})
+			target_link_libraries(${PROJECT_NAME} PRIVATE -lcurl -lSDL2_mixer -lmpg123 -lmodplug -lopusfile -lopus -lvorbisidec -logg SDL2)
+
+			# NVK (loaderless libvulkan + nouveau DRM) - replaces the EGL/GL
+			# Mesa stack. Matches dolphin's standalone NRO build.
+			if(NOT DEFINED MESA_NVK_DIR)
+				set(MESA_NVK_DIR "/nvk-build" CACHE PATH "Path to Mesa NVK build")
+			endif()
+			target_link_libraries(${PROJECT_NAME} PRIVATE
+				${MESA_NVK_DIR}/src/nouveau/vulkan/libvulkan.a
+				-ldrm_nouveau
+				-lzstd
+				-lz)
+
+			# ImGui renders the Tico overlay into the Vulkan swapchain.
+			target_sources(${PROJECT_NAME} PRIVATE
+				core/deps/imgui/imgui.cpp
+				core/deps/imgui/imgui_draw.cpp
+				core/deps/imgui/imgui_tables.cpp
+				core/deps/imgui/imgui_widgets.cpp
+				core/deps/imgui/backends/imgui_impl_vulkan.cpp)
+			target_include_directories(${PROJECT_NAME} PRIVATE
+				core/deps/imgui
+				core/deps/imgui/backends)
+
+			set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "tico-flycast")
+		else()
+			# Build as static library for multi-core integration
+			add_library(${PROJECT_NAME} STATIC core/emulator.cpp)
+			target_compile_definitions(${PROJECT_NAME} PRIVATE LIBRETRO HAVE_LIBNX HAVE_OPENGL HAVE_OIT)
+			set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "flycast_libretro_libnx")
+			set(CMAKE_STATIC_LIBRARY_PREFIX "")
+			# Apply symbol renaming defines for static linking with multiple cores
+			if(FLYCAST_EXTRA_CFLAGS)
+				separate_arguments(FLYCAST_EXTRA_CFLAGS_LIST UNIX_COMMAND "${FLYCAST_EXTRA_CFLAGS}")
+				target_compile_options(${PROJECT_NAME} PRIVATE ${FLYCAST_EXTRA_CFLAGS_LIST})
+			endif()
+		endif()
+		if(NOT USE_TICO)
+			find_path(GLEXT_H_INCLUDE_DIR NAMES GL/glext.h REQUIRED)
+			target_include_directories(${PROJECT_NAME} PRIVATE ${GLEXT_H_INCLUDE_DIR})
+		endif()
 	else()
-		add_executable(${PROJECT_NAME} core/emulator.cpp)
+		if(USE_TICO)
+			add_executable(${PROJECT_NAME}
+				core/emulator.cpp
+				tico/TicoStandaloneMain.cpp)
+			target_compile_definitions(${PROJECT_NAME} PRIVATE
+				HAVE_LIBNX USE_TICO TICO_STANDALONE
+				IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS)
+			target_include_directories(${PROJECT_NAME} PRIVATE
+				tico
+				shell/switch)
+			set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "tico-flycast-standalone")
+		else()
+			add_executable(${PROJECT_NAME} core/emulator.cpp)
+		endif()
+	endif()
+	if(NOT LIBRETRO AND USE_TICO)
+		# Standalone tico uses the same loaderless NVK stack as the current
+		# libretro frontend, but lets Flycast own the device/swapchain directly.
+		if(NOT DEFINED MESA_NVK_DIR)
+			set(MESA_NVK_DIR "/nvk-build" CACHE PATH "Path to Mesa NVK build")
+		endif()
+		target_link_libraries(${PROJECT_NAME} PRIVATE
+			${MESA_NVK_DIR}/src/nouveau/vulkan/libvulkan.a
+			-ldrm_nouveau
+			-lzstd
+			-lz)
 	endif()
 	if(USE_GLES)
 		target_compile_definitions(${PROJECT_NAME} PRIVATE GLES)
@@ -236,7 +342,9 @@ if(WINDOWS_STORE)
 	set(USE_VULKAN OFF)
 endif()
 
-set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS_RELEASE -s)
+if(NOT NINTENDO_SWITCH)
+	set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS_RELEASE -s)
+endif()
 if(MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE /GR /GS-)
 	if(WINDOWS_STORE)
@@ -425,10 +533,19 @@ if(USE_VULKAN)
 		option(ENABLE_HLSL "Enables HLSL input support" OFF)
 		option(ENABLE_PCH "Enables Precompiled header" OFF)
 		add_subdirectory(core/deps/glslang EXCLUDE_FROM_ALL)
+		if(NINTENDO_SWITCH AND NOT TARGET OSDependent)
+			add_subdirectory(core/deps/glslang/glslang/OSDependent/Unix
+				"${CMAKE_BINARY_DIR}/core/deps/glslang/glslang/OSDependent/Unix"
+				EXCLUDE_FROM_ALL)
+		endif()
 		add_library(glslang::glslang-default-resource-limits ALIAS glslang-default-resource-limits)
 		add_library(glslang::SPIRV ALIAS SPIRV)
 	endif()
 	target_link_libraries(${PROJECT_NAME} PRIVATE glslang::glslang-default-resource-limits glslang::SPIRV)
+	if(NINTENDO_SWITCH AND USE_TICO AND NOT USE_HOST_GLSLANG)
+		target_link_directories(${PROJECT_NAME} PRIVATE
+			"${CMAKE_BINARY_DIR}/core/deps/glslang/glslang/OSDependent/Unix")
+	endif()
 endif()
 
 if(NOT LIBRETRO)
@@ -846,6 +963,7 @@ if(LIBRETRO)
 		elseif(USE_GLES2)
 			target_sources(${PROJECT_NAME} PRIVATE core/deps/libretro-common/glsym/glsym_es2.c)
 		else()
+			# All other platforms (including Nintendo Switch) use glsym_gl.c
 			target_sources(${PROJECT_NAME} PRIVATE core/deps/libretro-common/glsym/glsym_gl.c)
 		endif()
 	endif()
@@ -1157,8 +1275,11 @@ else()
 				shell/switch/context_switch.S
 				shell/switch/nswitch.h
 				shell/switch/switch_gamepad.h
-				shell/switch/switch_main.cpp
 				shell/switch/ucontext.h)
+		if(NOT (USE_TICO AND NOT LIBRETRO))
+			target_sources(${PROJECT_NAME} PRIVATE
+					shell/switch/switch_main.cpp)
+		endif()
 	endif()
 endif()
 
@@ -1324,9 +1445,13 @@ if(USE_OPENGL)
 			core/wsi/gl_context.cpp
 			core/wsi/gl_context.h
 			core/wsi/osx.cpp
-			core/wsi/osx.h
+			core/wsi/osx.h)
+	# Exclude SDL WSI code for USE_TICO builds - has conflicting GLAD usage
+	if(NOT USE_TICO)
+		target_sources(${PROJECT_NAME} PRIVATE
 			core/wsi/sdl.cpp
 			core/wsi/sdl.h)
+	endif()
 
 	target_sources(${PROJECT_NAME} PRIVATE
 			core/rend/gles/glcache.h
@@ -1411,7 +1536,15 @@ endif()
 
 if(USE_VULKAN)
 	target_compile_definitions(${PROJECT_NAME} PUBLIC VK_ENABLE_BETA_EXTENSIONS VK_NO_PROTOTYPES)
-	if(ANDROID)
+	if(NINTENDO_SWITCH)
+		# vk::DynamicLoader has no Switch path (it dispatches on
+		# __linux__/__APPLE__/_WIN32 and #errors otherwise). We resolve the
+		# ICD via vk_icdGetInstanceProcAddr ourselves, so the class is dead
+		# code - disable it so the header doesn't try to compile it.
+		target_compile_definitions(${PROJECT_NAME} PUBLIC
+			VK_USE_PLATFORM_VI_NN
+			VULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL=0)
+	elseif(ANDROID)
 		target_compile_definitions(${PROJECT_NAME} PUBLIC VK_USE_PLATFORM_ANDROID_KHR)
 	elseif(X11_FOUND)
 		target_compile_definitions(${PROJECT_NAME} PUBLIC VK_USE_PLATFORM_XLIB_KHR)
@@ -1937,26 +2070,98 @@ endif()
 
 if(NINTENDO_SWITCH)
 	if(LIBRETRO)
-		add_custom_target(combined ALL
-			COMMAND ${CMAKE_AR} -x $<TARGET_FILE:xxHash::xxhash>
-			COMMAND ${CMAKE_AR} -x $<TARGET_FILE:chdr-static>
-			COMMAND ${CMAKE_AR} -x $<TARGET_FILE:zip>
-			COMMAND ${CMAKE_AR} -x $<TARGET_FILE:elf>
-			COMMAND ${CMAKE_AR} -x $<TARGET_FILE:flycast::res>
-			COMMAND ${CMAKE_AR} -rs flycast_libretro_libnx.a *.o
-			COMMAND rm *.o
-			WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}
-			DEPENDS xxHash::xxhash chdr-static zip ${PROJECT_NAME})
+		if(USE_TICO)
+			# Generated NRO for tico overlay
+			target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/../../../../external/nlohmann/include")
+			
+			# rcheevos (RetroAchievements) include + sources
+			set(TICO_RCHEEVOS_DIR "${CMAKE_SOURCE_DIR}/deps/rcheevos")
+			target_include_directories(${PROJECT_NAME} PRIVATE "${TICO_RCHEEVOS_DIR}/include")
+			target_compile_definitions(${PROJECT_NAME} PRIVATE RC_DISABLE_LUA RC_CLIENT_SUPPORTS_HASH)
+			target_sources(${PROJECT_NAME} PRIVATE
+				${TICO_RCHEEVOS_DIR}/src/rc_client.c
+				${TICO_RCHEEVOS_DIR}/src/rc_compat.c
+				${TICO_RCHEEVOS_DIR}/src/rc_util.c
+				${TICO_RCHEEVOS_DIR}/src/rc_version.c
+				${TICO_RCHEEVOS_DIR}/src/rapi/rc_api_common.c
+				${TICO_RCHEEVOS_DIR}/src/rapi/rc_api_editor.c
+				${TICO_RCHEEVOS_DIR}/src/rapi/rc_api_info.c
+				${TICO_RCHEEVOS_DIR}/src/rapi/rc_api_runtime.c
+				${TICO_RCHEEVOS_DIR}/src/rapi/rc_api_user.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/alloc.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/condition.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/condset.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/consoleinfo.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/format.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/lboard.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/memref.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/operand.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/rc_validate.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/richpresence.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/runtime.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/runtime_progress.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/trigger.c
+				${TICO_RCHEEVOS_DIR}/src/rcheevos/value.c
+				${TICO_RCHEEVOS_DIR}/src/rhash/aes.c
+				${TICO_RCHEEVOS_DIR}/src/rhash/cdreader.c
+				${TICO_RCHEEVOS_DIR}/src/rhash/hash.c
+				${TICO_RCHEEVOS_DIR}/src/rhash/hash_disc.c
+				${TICO_RCHEEVOS_DIR}/src/rhash/hash_encrypted.c
+				${TICO_RCHEEVOS_DIR}/src/rhash/hash_rom.c
+				${TICO_RCHEEVOS_DIR}/src/rhash/hash_zip.c
+				${TICO_RCHEEVOS_DIR}/src/rhash/md5.c)
+			# Generate NRO for tico overlay build
+			# The target is ${PROJECT_NAME} (flycast_libretro), output name is tico-flycast
+			
+			# Setup ROMFS with assets from main project
+			set(ROMFS_DIR "${CMAKE_CURRENT_BINARY_DIR}/romfs")
+			file(MAKE_DIRECTORY ${ROMFS_DIR})
+			
+			# Copy fonts, lang, and assets from local tico directories
+			file(COPY "${CMAKE_SOURCE_DIR}/tico/fonts" DESTINATION ${ROMFS_DIR})
+			file(COPY "${CMAKE_SOURCE_DIR}/tico/lang" DESTINATION ${ROMFS_DIR})
+			file(COPY "${CMAKE_SOURCE_DIR}/tico/assets" DESTINATION ${ROMFS_DIR})
+			
+			nx_generate_nacp(tico-flycast.nacp NAME "Flycast" AUTHOR "flyinghead" VERSION "${GIT_VERSION}")
+			nx_create_nro(${PROJECT_NAME} NACP tico-flycast.nacp ICON "${CMAKE_SOURCE_DIR}/shell/switch/flycast.jpeg" ROMFS ${ROMFS_DIR})
+		else()
+			# Combine static libraries for multi-core integration
+			add_custom_target(combined ALL
+				COMMAND ${CMAKE_AR} -x $<TARGET_FILE:xxHash::xxhash>
+				COMMAND ${CMAKE_AR} -x $<TARGET_FILE:chdr-static>
+				COMMAND ${CMAKE_AR} -x $<TARGET_FILE:zip>
+				COMMAND ${CMAKE_AR} -x $<TARGET_FILE:elf>
+				COMMAND ${CMAKE_AR} -x $<TARGET_FILE:flycast::res>
+				COMMAND ${CMAKE_AR} -rs flycast_libretro_libnx.a *.o
+				COMMAND rm *.o
+				WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}
+				DEPENDS xxHash::xxhash chdr-static zip ${PROJECT_NAME})
+		endif()
 	else()
-		nx_generate_nacp(flycast.nacp NAME "Flycast" AUTHOR "flyinghead, M4xw" VERSION "${GIT_VERSION}")
-		nx_create_nro(flycast NACP flycast.nacp ICON "${CMAKE_SOURCE_DIR}/shell/switch/flycast.jpeg")
+		if(USE_TICO)
+			set(ROMFS_DIR "${CMAKE_CURRENT_BINARY_DIR}/romfs")
+			file(MAKE_DIRECTORY ${ROMFS_DIR})
+			file(COPY "${CMAKE_SOURCE_DIR}/tico/fonts" DESTINATION ${ROMFS_DIR})
+			file(COPY "${CMAKE_SOURCE_DIR}/tico/lang" DESTINATION ${ROMFS_DIR})
+			file(COPY "${CMAKE_SOURCE_DIR}/tico/assets" DESTINATION ${ROMFS_DIR})
+
+			nx_generate_nacp(tico-flycast-standalone.nacp NAME "Flycast" AUTHOR "flyinghead" VERSION "${GIT_VERSION}")
+			nx_create_nro(${PROJECT_NAME} NACP tico-flycast-standalone.nacp ICON "${CMAKE_SOURCE_DIR}/shell/switch/flycast.jpeg" ROMFS ${ROMFS_DIR})
+		else()
+			nx_generate_nacp(flycast.nacp NAME "Flycast" AUTHOR "flyinghead, M4xw" VERSION "${GIT_VERSION}")
+			nx_create_nro(flycast NACP flycast.nacp ICON "${CMAKE_SOURCE_DIR}/shell/switch/flycast.jpeg")
+		endif()
 	endif()
 endif()
 
 if(IOS)
 	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>-${CMAKE_OSX_SYSROOT}/Flycast.ipa" TYPE BIN)
 elseif(NINTENDO_SWITCH AND NOT LIBRETRO)
-	install(FILES ${CMAKE_BINARY_DIR}/flycast.nro DESTINATION "${CMAKE_INSTALL_BINDIR}")
+	if(USE_TICO)
+		install(FILES ${CMAKE_BINARY_DIR}/tico-flycast-standalone.nro DESTINATION "${CMAKE_INSTALL_BINDIR}")
+	else()
+		install(FILES ${CMAKE_BINARY_DIR}/flycast.nro DESTINATION "${CMAKE_INSTALL_BINDIR}")
+	endif()
 elseif(LIBRETRO)
 	install(TARGETS ${PROJECT_NAME} DESTINATION "${CMAKE_INSTALL_LIBDIR}/libretro")
 else()

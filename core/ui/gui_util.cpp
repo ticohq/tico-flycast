@@ -21,6 +21,7 @@
 #include <vector>
 #include <algorithm>
 #include <cstdlib>
+#include <unordered_map>
 
 #include "types.h"
 #include "stdclass.h"
@@ -36,6 +37,14 @@ static std::string select_current_directory = "**home**";
 static std::vector<hostfs::FileInfo> subfolders;
 static std::vector<hostfs::FileInfo> folderFiles;
 bool subfolders_read;
+
+struct DragScrollState
+{
+	bool active = false;
+	ImVec2 speed;
+};
+
+static std::unordered_map<ImGuiID, DragScrollState> dragScrollStates;
 
 extern int insetLeft, insetRight, insetTop, insetBottom;
 extern ImFont *largeFont;
@@ -201,7 +210,7 @@ void scrollWhenDraggingOnVoid(ImGuiMouseButton mouse_button)
     ImGuiButtonFlags button_flags = (mouse_button == ImGuiMouseButton_Left) ? ImGuiButtonFlags_MouseButtonLeft
     		: (mouse_button == ImGuiMouseButton_Right) ? ImGuiButtonFlags_MouseButtonRight : ImGuiButtonFlags_MouseButtonMiddle;
     // If nothing hovered so far in the frame (not same as IsAnyItemHovered()!) or item is disabled
-    if (g.HoveredId == 0 || g.HoveredIdDisabled)
+    if (g.HoveredId == 0 || g.HoveredIdIsDisabled)
     {
     	bool hoveredAllowOverlap = g.HoveredIdAllowOverlap;
     	g.HoveredIdAllowOverlap = true;
@@ -213,8 +222,9 @@ void scrollWhenDraggingOnVoid(ImGuiMouseButton mouse_button)
     const ImVec2& delta = ImGui::GetIO().MouseDelta;
     if (held && delta != ImVec2())
     {
-    	window->DragScrolling = true;
-    	window->ScrollSpeed = delta;
+		struct DragScrollState& state = dragScrollStates[window->ID];
+		state.active = true;
+		state.speed = delta;
     }
 }
 
@@ -674,15 +684,20 @@ static void computeScrollSpeed(float &v)
 void windowDragScroll()
 {
 	ImGuiWindow *window = ImGui::GetCurrentWindow();
-	if (window->DragScrolling)
+	auto stateIt = dragScrollStates.find(window->ID);
+	if (stateIt == dragScrollStates.end() || !stateIt->second.active)
+		return;
+
+	DragScrollState& state = stateIt->second;
+	if (state.active)
 	{
 		if (!ImGui::GetIO().MouseDown[ImGuiMouseButton_Left])
 		{
-			computeScrollSpeed(window->ScrollSpeed.x);
-			computeScrollSpeed(window->ScrollSpeed.y);
-			if (window->ScrollSpeed == ImVec2())
+			computeScrollSpeed(state.speed.x);
+			computeScrollSpeed(state.speed.y);
+			if (state.speed == ImVec2())
 			{
-				window->DragScrolling = false;
+				state.active = false;
 				// FIXME we should really move the mouse off-screen after a touch up and this wouldn't be necessary
 				// the only problem is tool tips
 				gui_set_mouse_position(-1, -1);
@@ -693,12 +708,12 @@ void windowDragScroll()
 			ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
 			if (delta != ImVec2())
 				ImGui::ResetMouseDragDelta();
-			window->ScrollSpeed = delta;
+			state.speed = delta;
 		}
-		if (window->DragScrolling)
+		if (state.active)
 		{
-			ImGui::SetScrollX(window, window->Scroll.x - window->ScrollSpeed.x);
-			ImGui::SetScrollY(window, window->Scroll.y - window->ScrollSpeed.y);
+			ImGui::SetScrollX(window, window->Scroll.x - state.speed.x);
+			ImGui::SetScrollY(window, window->Scroll.y - state.speed.y);
 		}
 	}
 }
@@ -987,9 +1002,9 @@ bool Toast::draw()
 	const float maxW = std::min(uiScaled(640.f), displaySize.x);
 	ImFont *regularFont = ImGui::GetFont();
 	const ImVec2 titleSize = title.empty() ? ImVec2()
-			: largeFont->CalcTextSizeA(largeFont->FontSize, FLT_MAX, maxW, &title.front(), &title.back() + 1);
+			: largeFont->CalcTextSizeA(ImFontLegacySize(largeFont), FLT_MAX, maxW, &title.front(), &title.back() + 1);
 	const ImVec2 msgSize = message.empty() ? ImVec2()
-			: regularFont->CalcTextSizeA(regularFont->FontSize, FLT_MAX, maxW, &message.front(), &message.back() + 1);
+			: regularFont->CalcTextSizeA(ImFontLegacySize(regularFont), FLT_MAX, maxW, &message.front(), &message.back() + 1);
 	const ScaledVec2 padding(5.f, 4.f);
 	const ScaledVec2 spacing(0.f, 2.f);
 	ImVec2 totalSize(std::max(titleSize.x, msgSize.x), titleSize.y + msgSize.y);
@@ -1009,13 +1024,13 @@ bool Toast::draw()
 	if (!title.empty())
 	{
 		const ImU32 col = alphaOverride(ImGui::GetColorU32(ImGuiCol_Text), alpha);
-		dl->AddText(largeFont, largeFont->FontSize, pos, col, &title.front(), &title.back() + 1, maxW);
+		dl->AddText(largeFont, ImFontLegacySize(largeFont), pos, col, &title.front(), &title.back() + 1, maxW);
 		pos.y += spacing.y + titleSize.y;
 	}
 	if (!message.empty())
 	{
 		const ImU32 col = alphaOverride(0xFF00FFFF, alpha);	// yellow
-		dl->AddText(regularFont, regularFont->FontSize, pos, col, &message.front(), &message.back() + 1, maxW);
+		dl->AddText(regularFont, ImFontLegacySize(regularFont), pos, col, &message.front(), &message.back() + 1, maxW);
 	}
 
 	return true;
@@ -1028,9 +1043,8 @@ std::string middleEllipsis(const std::string& s, float width)
 		return s;
 	std::string ellipsis;
 	char buf[5];
-	ImTextCharToUtf8(buf, ImGui::GetFont()->EllipsisChar);
-	for (int i = 0; i < ImGui::GetFont()->EllipsisCharCount; i++)
-		ellipsis += buf;
+	const int ellipsisBytes = ImTextCharToUtf8(buf, ImGui::GetFont()->EllipsisChar);
+	ellipsis.assign(buf, ellipsisBytes);
 
 	int l = s.length() / 2;
 	int d = l;

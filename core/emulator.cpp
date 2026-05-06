@@ -49,9 +49,66 @@
 #endif
 #include "hw/sh4/sh4_interpreter.h"
 #include "hw/sh4/dyna/ngen.h"
+#if defined(__SWITCH__) && defined(TICO_STANDALONE)
+#include "nswitch.h"
+#endif
 
 settings_t settings;
 constexpr char const *BIOS_TITLE = "Dreamcast BIOS";
+
+#if defined(__SWITCH__) && defined(TICO_STANDALONE)
+static void setTicoStandaloneThreadAffinity(const char *name, s32 preferredCore)
+{
+	u64 processMask = 0;
+	Result rc = svcGetInfo(&processMask, InfoType_CoreMask, CUR_PROCESS_HANDLE, 0);
+	if (R_FAILED(rc))
+	{
+		WARN_LOG(BOOT, "%s affinity: svcGetInfo(CoreMask) failed rc=0x%x", name, rc);
+		return;
+	}
+
+	if (preferredCore < 0 || preferredCore >= 4 || (processMask & (UINT64_C(1) << preferredCore)) == 0)
+	{
+		WARN_LOG(BOOT, "%s affinity: core %d unavailable in process mask 0x%llx",
+				name, (int)preferredCore, (unsigned long long)processMask);
+		return;
+	}
+
+	s32 previousPreferred = -1;
+	u64 previousMask = 0;
+	rc = svcGetThreadCoreMask(&previousPreferred, &previousMask, CUR_THREAD_HANDLE);
+	if (R_FAILED(rc))
+		WARN_LOG(BOOT, "%s affinity: svcGetThreadCoreMask failed rc=0x%x", name, rc);
+
+	const u32 affinityMask = 1u << preferredCore;
+	rc = svcSetThreadCoreMask(CUR_THREAD_HANDLE, preferredCore, affinityMask);
+	if (R_FAILED(rc))
+	{
+		WARN_LOG(BOOT, "%s affinity: svcSetThreadCoreMask core=%d mask=0x%x failed rc=0x%x",
+				name, (int)preferredCore, affinityMask, rc);
+		return;
+	}
+
+	s32 currentPreferred = -1;
+	u64 currentMask = 0;
+	rc = svcGetThreadCoreMask(&currentPreferred, &currentMask, CUR_THREAD_HANDLE);
+	if (R_FAILED(rc))
+	{
+		WARN_LOG(BOOT, "%s affinity: pinned to core %d mask=0x%x; readback failed rc=0x%x",
+				name, (int)preferredCore, affinityMask, rc);
+		return;
+	}
+
+	INFO_LOG(BOOT, "%s affinity: process=0x%llx previous=%d/0x%llx current=%d/0x%llx running=%u",
+			name,
+			(unsigned long long)processMask,
+			(int)previousPreferred,
+			(unsigned long long)previousMask,
+			(int)currentPreferred,
+			(unsigned long long)currentMask,
+			(unsigned)svcGetCurrentProcessorNumber());
+}
+#endif
 
 static void loadSpecialSettings()
 {
@@ -967,6 +1024,9 @@ void Emulator::start()
 		getSh4Executor()->Start();
 		threadResult = std::async(std::launch::async, [this] {
 				ThreadName _("Flycast-emu");
+#if defined(__SWITCH__) && defined(TICO_STANDALONE)
+				setTicoStandaloneThreadAffinity("Flycast-emu", 1);
+#endif
 				InitAudio();
 
 				try {

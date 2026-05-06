@@ -288,7 +288,7 @@ void fault_handler(int sn, siginfo_t * si, void *segfault_ctx);
 
 extern "C"
 {
-alignas(16) u8 __nx_exception_stack[0x1000];
+alignas(16) u8 __nx_exception_stack[0x8000];
 u64 __nx_exception_stack_size = sizeof(__nx_exception_stack);
 
 void context_switch_aarch64(void* context);

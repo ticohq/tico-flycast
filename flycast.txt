@@ -1,0 +1,60 @@
+[INFO][HOME] tico-flycast (Vulkan) starting
+[INFO][DISPLAY] Mode → Handheld (1280×720 crop)
+[INFO][VK] VkInstance created (2 extensions)
+[INFO][VK] VkSurfaceKHR created via VI_NN
+[DEBUG][CORE] Loaded 91 options from sdmc:/tico/config/cores/flycast.jsonc
+[DEBUG][CORE] RA: Found accounts.jsonc at sdmc:/tico/config/accounts.jsonc
+[DEBUG][CORE] RA: Config loaded (Enabled: 1, User: ticoverse, HasToken: 1, HasPassword: 1)
+[DEBUG][CORE] RA: Disabled on Switch during Vulkan bring-up
+[DEBUG][CORE] Config loaded, 91 options
+[DEBUG][CORE] RA: Failed to load trophy.mp3 -> Audio device hasn't been opened
+[DEBUG][CORE_INFO] shell/libretro/libretro.cpp:326 N[BOOT]: retro_init
+[DEBUG][CORE_INFO] shell/switch/libnx_vmem.cpp:119 N[VMEM]: virtmem::init successful
+[DEBUG][CORE_INFO] core/hw/mem/addrspace.cpp:425 N[VMEM]: Info: nvmem is enabled
+[DEBUG][CORE_INFO] core/hw/mem/addrspace.cpp:457 N[VMEM]: BASE 0x92632000 RAM(16 MB) 0x9e632000 VRAM64(8 MB) 0x96632000 ARAM(2 MB) 0xb2632000
+[DEBUG][CORE] Initialized: Flycast 185062196
+[INFO][HOME] Loading ROM: sdmc:/tico/roms/dc/Sonic Adventure (USA)/Sonic Adventure (USA).cue
+[DEBUG][CORE] LoadGame: Enter: sdmc:/tico/roms/dc/Sonic Adventure (USA)/Sonic Adventure (USA).cue
+[DEBUG][CORE] LoadGame: Opening file...
+[DEBUG][CORE] LoadGame: ROM size: 357 bytes
+[DEBUG][CORE] LoadGame: ROM data read successfully
+[DEBUG][CORE] LoadGame: Calling retro_load_game...
+[DEBUG][CORE]   gameInfo.path = sdmc:/tico/roms/dc/Sonic Adventure (USA)/Sonic Adventure (USA).cue
+[DEBUG][CORE]   gameInfo.size = 357
+[DEBUG][CORE]   gameInfo.data = 0xa6c5e8f60
+[DEBUG][CORE_INFO] shell/libretro/libretro.cpp:2075 N[BOOT]: retro_load_game: sdmc:/tico/roms/dc/Sonic Adventure (USA)/Sonic Adventure (USA).cue
+[DEBUG][CORE_INFO] File extension is: .cue
+[DEBUG][CORE] HW render requested: Vulkan 4194304.0
+[DEBUG][CORE] Vulkan negotiation interface registered (ver=1)
+[DEBUG][CORE_INFO] core/hw/mem/addrspace.cpp:425 N[VMEM]: Info: nvmem is enabled
+[DEBUG][CORE_INFO] core/hw/mem/addrspace.cpp:457 N[VMEM]: BASE 0x92632000 RAM(16 MB) 0x9e632000 VRAM64(8 MB) 0x96632000 ARAM(2 MB) 0xb2632000
+[DEBUG][CORE_INFO] core/emulator.cpp:59 N[BOOT]: Game ID is [MK-51000]
+[DEBUG][CORE_INFO] core/emulator.cpp:59 N[BOOT]: Game ID is [MK-51000]
+[DEBUG][CORE] LoadGame: retro_load_game succeeded
+[DEBUG][CORE] LoadGame: Getting AV info...
+[DEBUG][CORE_INFO] shell/libretro/libretro.cpp:2418 N[RENDERER]: retro_get_system_av_info: Res=480
+[DEBUG][CORE] LoadGame: Game loaded: base 640x480, FBO 853x853 @ 60.00 fps
+[DEBUG][CORE] LoadGame: Initializing HW render context...
+[DEBUG][CORE_INFO] core/rend/vulkan/vk_context_lr.cpp:148 N[RENDERER]: Device extension enabled: VK_KHR_swapchain
+[DEBUG][CORE_INFO] core/rend/vulkan/vk_context_lr.cpp:148 N[RENDERER]: Device extension enabled: VK_EXT_provoking_vertex
+[INFO][VK] Device created via core negotiation (qfi=0)
+[INFO][VK] Swapchain: 1920x1080 format=37 images=3
+[DEBUG][CORE] Vulkan device + swapchain ready
+[DEBUG][CORE] LoadGame: Calling context_reset...
+[DEBUG][CORE_INFO] shell/libretro/libretro.cpp:1883 N[RENDERER]: retro_vk_context_reset
+[DEBUG][CORE_INFO] core/rend/vulkan/vk_context_lr.cpp:262 N[RENDERER]: GPU Supports Vulkan API: 1.3.328
+[DEBUG][CORE_INFO] core/rend/vulkan/vk_context_lr.cpp:268 N[RENDERER]: GPU Supports vkGetPhysicalDeviceProperties2
+[DEBUG][CORE_INFO] core/rend/vulkan/vk_context_lr.cpp:293 N[RENDERER]: eR5G5B5A1UnormPack16 not supported for optimal tiling
+[DEBUG][CORE_INFO] core/rend/vulkan/vk_context_lr.cpp:307 N[RENDERER]: eR4G4B4A4UnormPack16 not supported for optimal tiling
+[DEBUG][CORE_INFO] core/rend/vulkan/vulkan_context.h:326 N[RENDERER]: Using depth format D32SfloatS8Uint tiling Optimal
+[DEBUG][CORE_INFO] core/rend/vulkan/vulkan_renderer.cpp:240 N[RENDERER]: VulkanRenderer::Init
+[DEBUG][CORE] LoadGame: context_reset done
+[DEBUG][CORE] LoadGame: Setting controller port device...
+[DEBUG][CORE] LoadGame: Complete!
+[INFO][HOME] Controller opened
+[INFO][HOME] Exit combo (+/-) detected
+[INFO][HOME] Shutting down
+[DEBUG][CORE] ~TicoCore: destroying (gameLoaded=1, initialized=1, hwRender=1)
+[DEBUG][CORE_INFO] shell/switch/libnx_vmem.cpp:141 N[VMEM]: virtmem::destroy done
+[INFO][HOME] Chainloading back to sdmc:/switch/tico.nro
+[INFO][HOME] Clean exit

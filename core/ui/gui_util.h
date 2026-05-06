@@ -21,6 +21,7 @@
 #include "types.h"
 #include "cfg/option.h"
 #include "imgui.h"
+#include "imgui_compat.h"
 #include "imgui_internal.h"
 #include "gui.h"
 #include "emulator.h"

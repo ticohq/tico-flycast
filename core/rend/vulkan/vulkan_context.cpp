@@ -37,6 +37,17 @@
 #include "adreno.h"
 #endif
 
+#if defined(VK_USE_PLATFORM_VI_NN)
+#define Event SwitchEvent
+#include <switch.h>
+#undef Event
+
+extern "C" {
+PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(VkInstance instance, const char *pName);
+VkResult VKAPI_CALL vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t *pVersion);
+}
+#endif
+
 #if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #endif
@@ -144,7 +155,11 @@ bool VulkanContext::InitInstance(const char** extensions, uint32_t extensions_co
 	{
 #if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
 		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
-#if defined(__ANDROID__) && HOST_CPU == CPU_ARM64
+#if defined(VK_USE_PLATFORM_VI_NN)
+		uint32_t icdVersion = 5;
+		vk_icdNegotiateLoaderICDInterfaceVersion(&icdVersion);
+		vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(&vk_icdGetInstanceProcAddr);
+#elif defined(__ANDROID__) && HOST_CPU == CPU_ARM64
 		vkGetInstanceProcAddr = loadVulkanDriver();
 #else
 		static vk::DynamicLoader dl;
@@ -821,7 +836,9 @@ bool VulkanContext::init()
 
 	std::vector<const char *> extensions;
 	extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-#if defined(USE_SDL)
+#if defined(VK_USE_PLATFORM_VI_NN)
+	extensions.push_back(VK_NN_VI_SURFACE_EXTENSION_NAME);
+#elif defined(USE_SDL)
 	if (!sdl_recreate_window(SDL_WINDOW_VULKAN))
 		return false;
     uint32_t extensionsCount = 0;
@@ -844,7 +861,11 @@ bool VulkanContext::init()
 		return false;
 	}
 
-#if defined(USE_SDL)
+#if defined(VK_USE_PLATFORM_VI_NN)
+	vk::ViSurfaceCreateInfoNN createInfo;
+	createInfo.window = window ? static_cast<NWindow *>(window) : nwindowGetDefault();
+	surface = instance->createViSurfaceNNUnique(createInfo);
+#elif defined(USE_SDL)
     VkSurfaceKHR surface;
     if (SDL_Vulkan_CreateSurface((SDL_Window *)window, (VkInstance)*instance, &surface) == 0) {
 		term();

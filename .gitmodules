@@ -44,3 +44,9 @@
 [submodule "core/deps/asio"]
 	path = core/deps/asio
 	url = https://github.com/flyinghead/asio.git
+[submodule "rcheevos"]
+	path = rcheevos
+	url = https://github.com/RetroAchievements/rcheevos.git
+[submodule "deps/rcheevos"]
+	path = deps/rcheevos
+	url = https://github.com/RetroAchievements/rcheevos.git

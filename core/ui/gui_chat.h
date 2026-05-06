@@ -20,6 +20,7 @@
 #include "types.h"
 #include "gui.h"
 #include "imgui.h"
+#include "imgui_compat.h"
 #include "network/ggpo.h"
 #include <chrono>
 

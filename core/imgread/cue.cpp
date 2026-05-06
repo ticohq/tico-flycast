@@ -59,9 +59,10 @@ Disc* cue_parse(const char* file, std::vector<u8> *digest)
 	hostfs::FileInfo fileInfo = hostfs::storage().getFileInfo(file);
 	size_t cue_len = fileInfo.size;
 
-	char cue_data[64_KB] = { 0 };
+	std::vector<char> cue_data_vec(64_KB, 0);
+	char* cue_data = cue_data_vec.data();
 
-	if (cue_len >= sizeof(cue_data))
+	if (cue_len >= cue_data_vec.size())
 	{
 		std::fclose(fsource);
 		throw FlycastException("CUE parse error: CUE file too big");

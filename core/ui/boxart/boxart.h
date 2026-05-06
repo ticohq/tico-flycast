@@ -40,7 +40,7 @@ private:
 	void loadDatabase();
 	void saveDatabase();
 	std::string getSaveDirectory() const {
-		return get_writable_data_path("/boxart/");
+		return get_writable_data_path("boxart/");
 	}
 	void fetchBoxart();
 
