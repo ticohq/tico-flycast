@@ -153,8 +153,10 @@ if(NINTENDO_SWITCH)
 
 	if(LIBRETRO)
 		if(USE_TICO)
-			# Build as executable with tico overlay UI
-			add_executable(${PROJECT_NAME} tico/TicoMain.cpp)
+			# Build as executable with tico overlay UI.
+			# FlycastEntry.cpp holds main(); the agnostic Tico::Main driver and
+			# the flycast CoreRuntime implementation are separate TUs.
+			add_executable(${PROJECT_NAME} tico/FlycastEntry.cpp)
 			target_compile_definitions(${PROJECT_NAME} PRIVATE
 				LIBRETRO HAVE_LIBNX USE_TICO USE_SDL USE_SDL_AUDIO
 				HAVE_VULKAN VK_USE_PLATFORM_VI_NN
@@ -163,6 +165,9 @@ if(NINTENDO_SWITCH)
 
 			# tico Vulkan frontend + libretro driver glue.
 			target_sources(${PROJECT_NAME} PRIVATE
+				tico/TicoMain.cpp
+				tico/FlycastRuntime.cpp
+				tico/TicoChainload.cpp
 				tico/TicoCore.cpp
 				tico/TicoOverlay.cpp
 				tico/TicoVulkan.cpp
@@ -224,9 +229,16 @@ if(NINTENDO_SWITCH)
 		endif()
 	else()
 		if(USE_TICO)
+			# StandaloneEntry.cpp holds main(); the shared agnostic Tico::Main
+			# driver + the native-flycast CoreRuntime live in separate TUs.
 			add_executable(${PROJECT_NAME}
 				core/emulator.cpp
-				tico/TicoStandaloneMain.cpp)
+				tico/StandaloneEntry.cpp
+				tico/StandaloneRuntime.cpp
+				tico/TicoMain.cpp
+				tico/TicoChainload.cpp
+				tico/TicoOverlay.cpp
+				tico/TicoTranslationManager.cpp)
 			target_compile_definitions(${PROJECT_NAME} PRIVATE
 				HAVE_LIBNX USE_TICO TICO_STANDALONE
 				IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS)

@@ -2,8 +2,16 @@
 #pragma once
 #include <cstdarg>
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <unordered_map>
+
+namespace Tico {
+/// Generic line-oriented log sink injected into the emulator-agnostic layer
+/// (Tico::Main / Tico::CoreRuntime). FlycastEntry wraps the project Logger in
+/// one of these so the generic code need not know about the macro logger.
+using LogCallback = std::function<void(const std::string &)>;
+}  // namespace Tico
 
 class Logger {
 public:

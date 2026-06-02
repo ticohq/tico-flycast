@@ -26,6 +26,24 @@ namespace TicoConfig {
     constexpr bool USE_SDLQUEUEAUDIO = true;
 }
 
+// Emulator-agnostic paths consumed by the generic Tico layer (Tico::Main,
+// Tico::ChainloadLauncher). Core-specific subpaths (dc states/saves/system)
+// stay in TicoConfig above and remain a flycast concern.
+namespace Tico { namespace Paths {
+    constexpr const char* Root              = "sdmc:/tico";
+    constexpr const char* Debug             = "sdmc:/tico/debug";
+    constexpr const char* Assets            = "sdmc:/tico/assets";
+    constexpr const char* Lang              = "sdmc:/tico/lang";
+    constexpr const char* System            = "sdmc:/tico/system";
+    constexpr const char* SavesRoot         = "sdmc:/tico/saves";
+    constexpr const char* StatesRoot        = "sdmc:/tico/states";
+    constexpr const char* CoreConfigDir     = "sdmc:/tico/config/cores";
+    constexpr const char* LauncherNro       = "sdmc:/switch/tico.nro";
+    constexpr const char* LauncherNroFallback = "sdmc:/switch/tico/tico.nro";
+    constexpr const char* DefaultTitleFont       = "romfs:/fonts/font.ttf";
+    constexpr const char* DefaultDescriptionFont = "romfs:/fonts/description.ttf";
+}}  // namespace Tico::Paths
+
 // UI Actions for HelpersBar
 enum UIActions {
     ACTION_CONFIRM,

@@ -24,25 +24,9 @@ struct rc_client_t;
 
 class IRenderer;
 
-/// @brief Alert position for RA notifications
-enum class RAAlertPosition {
-    TopLeft = 0,
-    TopRight,
-    BottomLeft,
-    BottomRight
-};
-
-/// @brief RA notification for the overlay
-struct RANotification {
-    std::string title;
-    std::string description;
-    std::string badge_name;     // badge identifier or "ra_icon" for session start
-    unsigned int textureId = 0; // GL texture for the badge (0 = no badge)
-    float timer = 0.0f;
-    float duration = 4.0f; // total display time
-    float slideIn = 0.4f;  // slide-in duration
-    float slideOut = 0.4f; // slide-out duration
-};
+// RANotification / RAAlertPosition now live in the backend-agnostic overlay
+// host header so the overlay need not include TicoCore.h.
+#include "TicoOverlayHost.h"
 
 /// @brief Simplified libretro core wrapper for Flycast
 class TicoCore

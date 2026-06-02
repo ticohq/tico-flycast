@@ -2,11 +2,16 @@
 /// @brief Overlay UI for tico-integrated Flycast
 /// Based on EmulatorScreen overlay rendering
 
+// The overlay uses ImVec2 math operators. The libretro target defines this as a
+// compile flag; the standalone target does not (and forcing it project-wide
+// clashes with implot's own #define), so define it per-TU before imgui.h.
+#ifndef IMGUI_DEFINE_MATH_OPERATORS
+#define IMGUI_DEFINE_MATH_OPERATORS
+#endif
+
 #include "TicoOverlay.h"
-#include "TicoCore.h"
 #include "TicoConfig.h"
 #include "TicoTranslationManager.h"
-#include "TicoVulkan.h"
 #include <algorithm>
 #include <cmath>
 #include <dirent.h>
@@ -15,10 +20,6 @@
 
 // Use relative path to json.hpp
 #include "../core/deps/json/json.hpp"
-
-#ifndef TICO_VULKAN_OVERLAY
-#include "glad.h"
-#endif
 
 #include "../core/deps/stb/stb_image.h"
 
@@ -35,44 +36,17 @@ static float OverlayScale()
 #include <switch.h>
 #endif
 
-#ifndef TICO_VULKAN_OVERLAY
-// Nanosvg for bolt icon
+// Nanosvg for vector icons. Backend-agnostic now: the overlay decodes to RGBA
+// and uploads through IOverlayHost::CreateTextureRGBA (TicoVulkan on libretro,
+// imguiDriver on the standalone), so there is no GL/Vulkan #ifdef here.
 #define NANOSVG_IMPLEMENTATION
 #include "deps/nanosvg/nanosvg.h"
 #define NANOSVGRAST_IMPLEMENTATION
 #include "deps/nanosvg/nanosvgrast.h"
-#endif
 
-// Helper to get state path (matches EmulatorScreen logic)
-static std::string GetStatePath(TicoCore *core, int slot)
-{
-    if (!core)
-        return "";
-
-    std::string romPath = core->GetGamePath();
-    std::string romName = romPath;
-
-    // Extract base name
-    size_t lastSlash = romName.find_last_of("/\\");
-    if (lastSlash != std::string::npos)
-    {
-        romName = romName.substr(lastSlash + 1);
-    }
-    size_t lastDot = romName.find_last_of(".");
-    if (lastDot != std::string::npos)
-    {
-        romName = romName.substr(0, lastDot);
-    }
-
-    // Ensure directory exists
-    struct stat st = {0};
-    if (stat(TicoConfig::STATES_PATH, &st) == -1)
-    {
-        mkdir(TicoConfig::STATES_PATH, 0777);
-    }
-
-    return std::string(TicoConfig::STATES_PATH) + romName + ".state" + std::to_string(slot);
-}
+// Save-state slot handling now lives behind IOverlayHost (libretro builds a
+// per-ROM .state path + calls TicoCore; the standalone uses flycast's native
+// save states), so the overlay no longer constructs paths itself.
 
 //==============================================================================
 // UI Style Helpers (simplified from UIStyle.h)
@@ -135,19 +109,9 @@ TicoOverlay::~TicoOverlay()
 
 void TicoOverlay::ReleaseAvatarTexture()
 {
-#ifdef TICO_VULKAN_OVERLAY
-    if (m_avatarTexture)
-    {
-        TicoVulkan::DestroyOverlayTexture(m_avatarTexture);
-        m_avatarTexture = 0;
-    }
-#else
-    if (m_avatarTexture != 0)
-    {
-        glDeleteTextures(1, &m_avatarTexture);
-        m_avatarTexture = 0;
-    }
-#endif
+    if (m_avatarTexture && m_host)
+        m_host->DestroyTexture(m_avatarTexture);
+    m_avatarTexture = 0;
     m_avatarWidth = 0;
     m_avatarHeight = 0;
 }
@@ -170,23 +134,11 @@ bool TicoOverlay::LoadAvatarTextureFromMemory(const unsigned char *data, size_t 
     }
 
     ReleaseAvatarTexture();
-#ifdef TICO_VULKAN_OVERLAY
-    ImTextureID texture = TicoVulkan::CreateOverlayTextureRGBA(rgba,
-                                                              static_cast<uint32_t>(width),
-                                                              static_cast<uint32_t>(height));
+    ImTextureID texture = m_host ? m_host->CreateTextureRGBA(rgba, width, height) : 0;
     stbi_image_free(rgba);
     if (!texture)
         return false;
     m_avatarTexture = texture;
-#else
-    glGenTextures(1, &m_avatarTexture);
-    glBindTexture(GL_TEXTURE_2D, m_avatarTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(rgba);
-#endif
     m_avatarWidth = width;
     m_avatarHeight = height;
     return true;
@@ -209,23 +161,11 @@ bool TicoOverlay::LoadAvatarTextureFromFile(const char *path)
     }
 
     ReleaseAvatarTexture();
-#ifdef TICO_VULKAN_OVERLAY
-    ImTextureID texture = TicoVulkan::CreateOverlayTextureRGBA(rgba,
-                                                              static_cast<uint32_t>(width),
-                                                              static_cast<uint32_t>(height));
+    ImTextureID texture = m_host ? m_host->CreateTextureRGBA(rgba, width, height) : 0;
     stbi_image_free(rgba);
     if (!texture)
         return false;
     m_avatarTexture = texture;
-#else
-    glGenTextures(1, &m_avatarTexture);
-    glBindTexture(GL_TEXTURE_2D, m_avatarTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(rgba);
-#endif
     m_avatarWidth = width;
     m_avatarHeight = height;
     return true;
@@ -596,11 +536,7 @@ void TicoOverlay::RenderSocialArea(ImDrawList *dl, ImVec2 displaySize)
         ImVec2 p_min = ImVec2(avatarCenter.x - imgRadius, avatarCenter.y - imgRadius);
         ImVec2 p_max = ImVec2(avatarCenter.x + imgRadius, avatarCenter.y + imgRadius);
 
-#ifdef TICO_VULKAN_OVERLAY
         ImTextureID avatarTexture = m_avatarTexture;
-#else
-        ImTextureID avatarTexture = (ImTextureID)(intptr_t)m_avatarTexture;
-#endif
         dl->AddImageRounded(avatarTexture, p_min, p_max,
                             ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, imgRadius);
 
@@ -1046,12 +982,8 @@ void TicoOverlay::RenderSaveStatesMenu(ImDrawList *dl, ImVec2 displaySize)
         // No Dividers
 
         bool exists = false;
-        if (m_core && m_core->IsGameLoaded())
-        {
-            std::string path = GetStatePath(m_core, i);
-            struct stat buffer;
-            exists = (stat(path.c_str(), &buffer) == 0);
-        }
+        if (m_host && m_host->IsGameLoaded())
+            exists = m_host->StateSlotExists(i);
 
         char slotText[64];
         snprintf(slotText, sizeof(slotText), tr("emulator_slot").c_str(), i + 1, exists ? tr("emulator_in_use").c_str() : tr("emulator_empty").c_str());
@@ -1360,104 +1292,76 @@ void TicoOverlay::RenderHelpersBar(ImDrawList *dl, ImVec2 displaySize)
 // Input Handling
 //==============================================================================
 
-bool TicoOverlay::HandleInput(SDL_GameController *controller)
+bool TicoOverlay::HandleInput(const Tico::FrameInput &input)
 {
-    if (!controller)
-        return false;
+    using namespace Tico;
 
-    uint32_t now = SDL_GetTicks();
-    bool debounced = (now - m_lastInputTime) > DEBOUNCE_MS;
+    const uint64_t buttons = input.buttons;
+    const uint64_t pressed = input.pressed;
 
-    // Check toggle (Guide or Start+Select)
-    bool start = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_START);
-    bool select = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_BACK);
-    bool guide = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_GUIDE);
-    bool togglePressed = guide || (start && select);
-
-    if (togglePressed && !m_toggleHeld && debounced)
+    // Start+Select ONLY ever opens the overlay — it never closes it (closing is
+    // done with the Back button). This makes accidental closes from input-poll
+    // flicker impossible. While the combo is held we consume it so it can't be
+    // misread by the menu handlers below.
+    const bool comboDown = (buttons & Pad_Start) && (buttons & Pad_Select);
+    if (comboDown)
     {
-        m_toggleHeld = true;
-        m_lastInputTime = now;
-
         if (m_currentMenu == OverlayMenu::None)
-        {
             Show();
-        }
-        else if (m_currentMenu == OverlayMenu::SaveStates || m_currentMenu == OverlayMenu::Settings || m_currentMenu == OverlayMenu::DiscSelect)
-        {
-            m_currentMenu = OverlayMenu::QuickMenu;
-            m_animTimer = 0.4f; // Skip animation
-        }
-        else
-        {
-            Hide();
-        }
         return true;
     }
-    if (!togglePressed)
-        m_toggleHeld = false;
 
     // If overlay not visible, don't consume input
     if (m_currentMenu == OverlayMenu::None)
         return false;
 
-    // Navigation
-    bool upPressed = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP);
-    bool downPressed = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
-    bool leftPressed = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
-    bool rightPressed = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+    // Directional navigation: merge D-pad + left stick into a held bitmask,
+    // then derive edge + hold-repeat without any time API.
+    uint64_t dirHeld = 0;
+    if ((buttons & Pad_Up) || input.leftStickY < -16000) dirHeld |= Pad_Up;
+    if ((buttons & Pad_Down) || input.leftStickY > 16000) dirHeld |= Pad_Down;
+    if ((buttons & Pad_Left) || input.leftStickX < -16000) dirHeld |= Pad_Left;
+    if ((buttons & Pad_Right) || input.leftStickX > 16000) dirHeld |= Pad_Right;
 
-    bool confirmPressed = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_B);
-    bool backPressed = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_A); // Switch layout: B is Confirm, A is Back? No, usually A is Confirm, B is Back.
-    // Wait, check original code:
-    // bool confirmPressed = ... BUTTON_B
-    // bool backPressed = ... BUTTON_A
-    // This looks like Xbox/PC layout where A is bottom (confirm), B is right (back).
-    // But on Switch controller, B is bottom, A is right. Let's assume confirm/back button mapping is correct for platform.
-
-    bool minusPressed = select;
-    bool xPressed = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_Y);
-
-    // Analog stick navigation
-    Sint16 axisY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY);
-    if (axisY < -16000)
-        upPressed = true;
-    if (axisY > 16000)
-        downPressed = true;
-
-    Sint16 axisX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX);
-    if (axisX < -16000)
-        leftPressed = true;
-    if (axisX > 16000)
-        rightPressed = true;
-
-    bool startHeld = start;
-    if (minusPressed && !startHeld && debounced && m_currentMenu == OverlayMenu::QuickMenu)
+    uint64_t dirFire = dirHeld & ~m_navHeldPrev; // new presses fire instantly
+    if (dirHeld != 0 && dirHeld == m_navHeldPrev)
     {
-        m_shouldReset = true;
-        Hide();
-        m_lastInputTime = now;
-        return true;
+        if (--m_navRepeatFrames <= 0)
+        {
+            dirFire |= dirHeld;
+            m_navRepeatFrames = NAV_REPEAT_FRAMES;
+        }
     }
+    else if (dirFire != 0)
+    {
+        m_navRepeatFrames = NAV_INITIAL_DELAY_FRAMES;
+    }
+    m_navHeldPrev = dirHeld;
+
+    bool upPressed = (dirFire & Pad_Up) != 0;
+    bool downPressed = (dirFire & Pad_Down) != 0;
+    bool leftPressed = (dirFire & Pad_Left) != 0;
+    bool rightPressed = (dirFire & Pad_Right) != 0;
+
+    // Confirm = B, Back = A, disc select = Y (edge-triggered).
+    bool confirmPressed = (pressed & Pad_B) != 0;
+    bool backPressed = (pressed & Pad_A) != 0;
+    bool xPressed = (pressed & Pad_Y) != 0;
 
     // X button for disc select
-    if (xPressed && debounced && m_currentMenu == OverlayMenu::QuickMenu && !m_discs.empty())
+    if (xPressed && m_currentMenu == OverlayMenu::QuickMenu && !m_discs.empty())
     {
         m_currentMenu = OverlayMenu::DiscSelect;
         m_discSelection = 0;
         m_discScrollY = 0.0f;
         m_discTargetScrollY = 0.0f;
         m_animTimer = 0.0f;
-        m_lastInputTime = now;
         return true;
     }
 
     // Up
-    if (upPressed && !m_upHeld && debounced)
+    if (upPressed)
     {
-        m_upHeld = true;
-        m_lastInputTime = now;
-
         if (m_currentMenu == OverlayMenu::QuickMenu)
         {
             m_quickMenuSelection = (m_quickMenuSelection + 3) % 4; // 4 items (Settings added)
@@ -1486,15 +1390,9 @@ bool TicoOverlay::HandleInput(SDL_GameController *controller)
             m_discScrollY = m_discTargetScrollY;
         }
     }
-    if (!upPressed)
-        m_upHeld = false;
-
     // Down
-    if (downPressed && !m_downHeld && debounced)
+    if (downPressed)
     {
-        m_downHeld = true;
-        m_lastInputTime = now;
-
         if (m_currentMenu == OverlayMenu::QuickMenu)
         {
             m_quickMenuSelection = (m_quickMenuSelection + 1) % 4;
@@ -1523,32 +1421,20 @@ bool TicoOverlay::HandleInput(SDL_GameController *controller)
             m_discScrollY = m_discTargetScrollY;
         }
     }
-    if (!downPressed)
-        m_downHeld = false;
-
     // Left/Right (Settings Only)
     bool directionChanged = false;
     int direction = 0;
 
-    if (leftPressed && !m_leftHeld && debounced)
+    if (leftPressed)
     {
-        m_leftHeld = true;
         direction = -1;
         directionChanged = true;
-        m_lastInputTime = now;
     }
-    if (!leftPressed)
-        m_leftHeld = false;
-
-    if (rightPressed && !m_rightHeld && debounced)
+    if (rightPressed)
     {
-        m_rightHeld = true;
         direction = 1;
         directionChanged = true;
-        m_lastInputTime = now;
     }
-    if (!rightPressed)
-        m_rightHeld = false;
 
     if (directionChanged && m_currentMenu == OverlayMenu::Settings)
     {
@@ -1596,11 +1482,8 @@ bool TicoOverlay::HandleInput(SDL_GameController *controller)
     }
 
     // Confirm (Logic for entering submenus or toggling)
-    if (confirmPressed && !m_confirmHeld && debounced)
+    if (confirmPressed)
     {
-        m_confirmHeld = true;
-        m_lastInputTime = now;
-
         if (m_currentMenu == OverlayMenu::QuickMenu)
         {
             switch (m_quickMenuSelection)
@@ -1627,17 +1510,16 @@ bool TicoOverlay::HandleInput(SDL_GameController *controller)
         }
         else if (m_currentMenu == OverlayMenu::SaveStates)
         {
-            if (m_core)
+            if (m_host)
             {
-                std::string statePath = GetStatePath(m_core, m_saveStateSlot);
                 if (m_isSaveMode)
                 {
-                    m_core->SaveState(statePath);
+                    m_host->SaveStateSlot(m_saveStateSlot);
                     m_currentMenu = OverlayMenu::QuickMenu;
                 }
                 else
                 {
-                    m_core->LoadState(statePath);
+                    m_host->LoadStateSlot(m_saveStateSlot);
                     Hide();
                     m_animTimer = 0.4f;
                     return true;
@@ -1684,27 +1566,18 @@ bool TicoOverlay::HandleInput(SDL_GameController *controller)
         else if (m_currentMenu == OverlayMenu::DiscSelect)
         {
             // Swap disc
-            if (m_core && !m_discs.empty())
+            if (m_host && !m_discs.empty())
             {
-                bool ok = m_core->SwapDiskByPath(m_discs[m_discSelection].romPath);
-                if (ok)
-                {
-                    Hide();
-                    m_animTimer = 0.4f;
-                    return true;
-                }
+                m_host->SwapDisc(m_discs[m_discSelection].romPath);
+                Hide();
+                m_animTimer = 0.4f;
+                return true;
             }
         }
     }
-    if (!confirmPressed)
-        m_confirmHeld = false;
-
     // Back
-    if (backPressed && !m_backHeld && debounced)
+    if (backPressed)
     {
-        m_backHeld = true;
-        m_lastInputTime = now;
-
         if (m_currentMenu == OverlayMenu::QuickMenu)
         {
             Hide();
@@ -1725,8 +1598,6 @@ bool TicoOverlay::HandleInput(SDL_GameController *controller)
             m_animTimer = 0.4f;
         }
     }
-    if (!backPressed)
-        m_backHeld = false;
 
     return true;
 }
@@ -1763,8 +1634,8 @@ void TicoOverlay::ScanForDiscs()
     m_discScrollY = 0.0f;
     m_discTargetScrollY = 0.0f;
 
-    if (!m_core) return;
-    std::string currentPath = m_core->GetGamePath();
+    if (!m_host) return;
+    std::string currentPath = m_host->GetGamePath();
     if (currentPath.empty()) return;
 
     // Strip quotes if present
@@ -2310,40 +2181,24 @@ void TicoOverlay::ApplyScalingSettings(bool save)
 // Helper to load SVG
 void TicoOverlay::LoadSVGIcon()
 {
-#ifdef TICO_VULKAN_OVERLAY
-    m_boltTexture = 0;
-    m_boltWidth = 0;
-    m_boltHeight = 0;
-    return;
-#else
+    if (!m_host)
+        return;
+
     // Embed SVG to avoid file path issues
     const char *svgContent = R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="#FFFFFF" d="M338.8-9.9c11.9 8.6 16.3 24.2 10.9 37.8L271.3 224 416 224c13.5 0 25.5 8.4 30.1 21.1s.7 26.9-9.6 35.5l-288 240c-11.3 9.4-27.4 9.9-39.3 1.3s-16.3-24.2-10.9-37.8L176.7 288 32 288c-13.5 0-25.5-8.4-30.1-21.1s-.7-26.9 9.6-35.5l288-240c11.3-9.4 27.4-9.9 39.3-1.3z"/></svg>)";
 
-    char *input = strdup(svgContent); // nsvgParse modifies the string? Documentation says 'input' should be null terminated
+    char *input = strdup(svgContent);
     if (!input)
         return;
 
     NSVGimage *image = nsvgParse(input, "px", 96);
     free(input);
-
     if (!image)
-    {
         return;
-    }
 
-    // Rasterize
-    int w = (int)image->width;
-    int h = (int)image->height;
-
-    // Scale down if too big (bolt.svg might be huge)
-    // bolt.svg is 448x512 viewbox
-    // Scale to reasonable texture size (e.g. height 64) for high quality downscaling
     float scale = 64.0f / image->height;
-    w = (int)(image->width * scale);
-    h = (int)(image->height * scale);
-
-    m_boltWidth = w;
-    m_boltHeight = h;
+    int w = (int)(image->width * scale);
+    int h = (int)(image->height * scale);
 
     NSVGrasterizer *rast = nsvgCreateRasterizer();
     if (!rast)
@@ -2362,20 +2217,15 @@ void TicoOverlay::LoadSVGIcon()
 
     nsvgRasterize(rast, image, 0, 0, scale, img, w, h, w * 4);
 
-    // Upload texture
-    if (m_boltTexture != 0)
-        glDeleteTextures(1, &m_boltTexture);
-    glGenTextures(1, &m_boltTexture);
-    glBindTexture(GL_TEXTURE_2D, m_boltTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    if (m_boltTexture)
+        m_host->DestroyTexture(m_boltTexture);
+    m_boltTexture = m_host->CreateTextureRGBA(img, w, h);
+    m_boltWidth = w;
+    m_boltHeight = h;
 
     free(img);
     nsvgDeleteRasterizer(rast);
     nsvgDelete(image);
-#endif
 }
 
 // ... existing RenderStatusBar ...
@@ -2544,7 +2394,7 @@ void TicoOverlay::RenderStatusBar(ImDrawList *dl, ImVec2 displaySize)
                     // Tint
                     ImU32 tint = IM_COL32(235, 235, 235, alphaBolt);
 
-                    dl->AddImage((ImTextureID)(intptr_t)m_boltTexture,
+                    dl->AddImage(m_boltTexture,
                                  p_min, p_max,
                                  ImVec2(0, 0), ImVec2(1, 1),
                                  tint);
@@ -2559,46 +2409,16 @@ void TicoOverlay::RenderStatusBar(ImDrawList *dl, ImVec2 displaySize)
 //==============================================================================
 
 void TicoOverlay::EnsureRAIconLoaded() {
-#ifdef TICO_VULKAN_OVERLAY
+    // The RA icon/badge textures are owned and uploaded by the host (libretro
+    // TicoCore); the overlay just resolves cached ids in ResolveNotificationTextures.
     m_raIconLoadAttempted = true;
-    return;
-#else
-    if (!m_core || m_raIconLoadAttempted) return;
-    m_raIconLoadAttempted = true;
-
-    if (m_core->m_raIconTexture != 0) return; // already loaded
-
-    const char* svgPath = "romfs:/assets/ra.svg";
-    NSVGimage* image = nsvgParseFromFile(svgPath, "px", 96);
-    if (image) {
-        float sc = 64.0f / image->height;
-        int w = (int)(image->width * sc), h = (int)(image->height * sc);
-        NSVGrasterizer* rast = nsvgCreateRasterizer();
-        if (rast) {
-            unsigned char* img = (unsigned char*)malloc(w * h * 4);
-            if (img) {
-                nsvgRasterize(rast, image, 0, 0, sc, img, w, h, w * 4);
-                unsigned int tex = 0;
-                glGenTextures(1, &tex);
-                glBindTexture(GL_TEXTURE_2D, tex);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img);
-                glBindTexture(GL_TEXTURE_2D, 0);
-                m_core->m_raIconTexture = tex;
-                free(img);
-            }
-            nsvgDeleteRasterizer(rast);
-        }
-        nsvgDelete(image);
-    }
-#endif
 }
 
 void TicoOverlay::ResolveNotificationTextures() {
-    if (!m_core) return;
-    std::lock_guard<std::mutex> lock(m_core->m_raCallbackMutex);
-    auto& notifications = m_core->m_raNotifications;
+    IOverlayRAHost *ra = m_host ? m_host->RA() : nullptr;
+    if (!ra) return;
+    std::lock_guard<std::mutex> lock(ra->Mutex());
+    auto& notifications = ra->Notifications();
     if (notifications.empty()) return;
 
     for (auto& n : notifications) {
@@ -2606,29 +2426,29 @@ void TicoOverlay::ResolveNotificationTextures() {
         if (n.badge_name.empty()) continue;
 
         if (n.badge_name == "ra_icon") {
-            n.textureId = m_core->m_raIconTexture;
+            n.textureId = ra->IconTexture();
         } else {
-            // Only check the in-memory GL texture cache — NO disk I/O, NO stbi_load.
-            auto it = m_core->m_raBadgeCache.find(n.badge_name);
-            if (it != m_core->m_raBadgeCache.end()) {
-                n.textureId = it->second;
-            }
-            // If not in cache yet, leave textureId=0; the badge will appear
-            // once ProcessPendingBadgeUploads uploads it (next RunFrame).
+            // Only check the in-memory texture cache — NO disk I/O, NO stbi_load.
+            unsigned int t = ra->BadgeTexture(n.badge_name);
+            if (t != 0)
+                n.textureId = t;
+            // If not cached yet, leave textureId=0; the badge appears once the
+            // host uploads it (next frame).
         }
     }
 }
 
 void TicoOverlay::RenderRAAlerts(ImDrawList *dl, ImVec2 displaySize, float deltaTime) {
-    if (!m_core) return;
-    std::lock_guard<std::mutex> lock(m_core->m_raCallbackMutex);
-    auto& notifications = m_core->m_raNotifications;
+    IOverlayRAHost *ra = m_host ? m_host->RA() : nullptr;
+    if (!ra) return;
+    std::lock_guard<std::mutex> lock(ra->Mutex());
+    auto& notifications = ra->Notifications();
     if (notifications.empty()) return;
 
     float scale = OverlayScale();
     ImFont *font = ImGui::GetFont();
-    ImFont *descFont = font;
-    if (ImGui::GetIO().Fonts->Fonts.Size > 1) {
+    ImFont *descFont = m_descFont ? m_descFont : font;
+    if (!m_descFont && ImGui::GetIO().Fonts->Fonts.Size > 1) {
         descFont = ImGui::GetIO().Fonts->Fonts[1];
     }
     float descFontSize = ImGui::GetFontSize() * 0.65f;
@@ -2645,7 +2465,7 @@ void TicoOverlay::RenderRAAlerts(ImDrawList *dl, ImVec2 displaySize, float delta
     float badgeRadius = 4.0f * scale;
     float badgeMargin = 12.0f * scale;
 
-    RAAlertPosition pos = m_core->m_raAlertPosition;
+    RAAlertPosition pos = ra->AlertPosition();
     bool isTop = (pos == RAAlertPosition::TopLeft || pos == RAAlertPosition::TopRight);
     bool isRight = (pos == RAAlertPosition::TopRight || pos == RAAlertPosition::BottomRight);
 

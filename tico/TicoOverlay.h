@@ -3,15 +3,11 @@
 #pragma once
 
 #include "imgui.h"
-#include <SDL.h>
+#include "TicoMain.h"        // Tico::FrameInput / PadButton
+#include "TicoOverlayHost.h" // IOverlayHost / RANotification / RAAlertPosition
 #include <string>
 #include <vector>
 #include <memory>
-
-// Forward declaration
-class TicoCore;
-struct RANotification;
-enum class RAAlertPosition;
 
 /// @brief Overlay menu types
 enum class OverlayMenu
@@ -61,9 +57,9 @@ public:
     void Render(ImVec2 displaySize, unsigned int gameTexture, float aspectRatio,
                 int frameWidth, int frameHeight, int fboWidth = 0, int fboHeight = 0);
 
-    /// @brief Handle input
+    /// @brief Handle neutralized input
     /// @return true if input was consumed by overlay
-    bool HandleInput(SDL_GameController *controller);
+    bool HandleInput(const Tico::FrameInput &input);
 
     /// @brief Show/hide overlay
     void Show();
@@ -73,8 +69,18 @@ public:
     /// @brief Set game title for title card
     void SetGameTitle(const std::string &title) { m_gameTitle = title; }
 
-    /// @brief Set core reference for save states
-    void SetCore(TicoCore *core) { m_core = core; }
+    /// @brief Set the backend host (emulator + renderer adapter). Triggers a
+    /// reload of host-backed assets (avatar texture) now that a renderer exists.
+    void SetHost(IOverlayHost *host)
+    {
+        m_host = host;
+        if (m_host)
+            LoadAccountData();
+    }
+
+    /// @brief Font used for RA alert descriptions (description.ttf). When unset,
+    /// the overlay falls back to the atlas' second font / current font.
+    void SetDescriptionFont(ImFont *font) { m_descFont = font; }
 
     /// @brief Check if user wants to exit
     bool ShouldExit() const { return m_shouldExit; }
@@ -104,7 +110,8 @@ private:
 
     OverlayMenu m_currentMenu = OverlayMenu::None;
     std::string m_gameTitle;
-    TicoCore *m_core = nullptr;
+    IOverlayHost *m_host = nullptr;
+    ImFont *m_descFont = nullptr; // description.ttf for RA alert descriptions
 
     // Animation
     float m_animTimer = 0.0f;
@@ -132,20 +139,19 @@ private:
     void ApplyScalingSettings(bool save = true);
 
     // Triangle texture
-    unsigned int m_triangleTexture = 0;
+    ImTextureID m_triangleTexture = 0;
     int m_triangleWidth = 0;
     int m_triangleHeight = 0;
 
-    // Input debounce
-    bool m_upHeld = false;
-    bool m_downHeld = false;
-    bool m_leftHeld = false;
-    bool m_rightHeld = false;
-    bool m_confirmHeld = false;
-    bool m_backHeld = false;
-    bool m_toggleHeld = false;
-    uint32_t m_lastInputTime = 0;
-    static constexpr uint32_t DEBOUNCE_MS = 200;
+    // Directional nav repeat (frame-based; replaces SDL time debounce).
+    // Discrete buttons use FrameInput edge bits and need no repeat state.
+    uint64_t m_navHeldPrev = 0;
+    int m_navRepeatFrames = 0;
+    static constexpr int NAV_INITIAL_DELAY_FRAMES = 14;
+    static constexpr int NAV_REPEAT_FRAMES = 6;
+
+    // Start+Select opens the overlay only; it never closes it (Back closes), so
+    // no combo-edge/flicker state is needed.
 
     // Exit/Reset flags
     bool m_shouldExit = false;
@@ -156,7 +162,7 @@ private:
     bool m_isCharging = false;
     float m_batteryTimer = 0.0f;
     float m_chargingStateProgress = 0.0f;
-    unsigned int m_boltTexture = 0;
+    ImTextureID m_boltTexture = 0;
     int m_boltWidth = 0;
     int m_boltHeight = 0;
 
@@ -169,11 +175,7 @@ private:
     void LoadSVGIcon();
 
     // Social Area
-#ifdef TICO_VULKAN_OVERLAY
     ImTextureID m_avatarTexture = 0;
-#else
-    unsigned int m_avatarTexture = 0;
-#endif
     int m_avatarWidth = 0;
     int m_avatarHeight = 0;
     std::string m_nickname;

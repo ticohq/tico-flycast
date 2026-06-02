@@ -191,6 +191,9 @@ static ImGuiKey keycodeToImGuiKey(u8 keycode)
 	}
 }
 
+static void (*s_ticoFontHook)() = nullptr;
+void gui_set_font_hook(void (*hook)()) { s_ticoFontHook = hook; }
+
 void gui_initFonts()
 {
 	static float uiScale;
@@ -333,6 +336,9 @@ void gui_initFonts()
 	largeFont = io.Fonts->AddFontFromMemoryTTF(data.release(), dataSize, largeFontSize, nullptr, ranges);
 
     NOTICE_LOG(RENDERER, "Screen DPI is %.0f, size %d x %d. Scaling by %.2f", settings.display.dpi, settings.display.width, settings.display.height, settings.display.uiScale);
+	// Tico: let an external overlay add its fonts before the atlas is built.
+	if (s_ticoFontHook)
+		s_ticoFontHook();
 	vgamepad::applyUiScale();
 }
 
@@ -3716,10 +3722,22 @@ static std::string getFPSNotification()
 	return std::string(settings.input.fastForwardMode ? ">>" : "");
 }
 
+static bool s_ticoSuppressOsd = false;
+void gui_set_suppress_native_osd(bool suppress) { s_ticoSuppressOsd = suppress; }
+
 void gui_draw_osd()
 {
 	gui_newFrame();
 	ImGui::NewFrame();
+
+	// Tico: when an external overlay owns the screen we want none of flycast's
+	// native OSD (FPS, toasts, lua, on-screen gamepad) — just an empty frame.
+	if (s_ticoSuppressOsd)
+	{
+		ImGui::Render();
+		uiThreadRunner.execTasks();
+		return;
+	}
 
 #ifdef USE_RACHIEVEMENTS
 	if (!achievements::notifier.draw())
