@@ -4,10 +4,9 @@
 /// Mirrors tico-ppsspp/tico/TicoMain.h: `Tico::Main` owns the Switch platform
 /// bring-up, the frame loop, and libnx pad polling, and drives an opaque
 /// `Tico::CoreRuntime`. The only emulator-specific code lives behind that
-/// interface (FlycastRuntime for the libretro path, StandaloneRuntime for the
-/// native path). This header pulls in no flycast/libretro/SDL types so it can
-/// back any core, and crucially no SDL — the standalone target does not link
-/// SDL, so input here is libnx pad only.
+/// interface (FlycastRuntime for the libretro path). This header pulls in no
+/// flycast/libretro/SDL types so it can back any core; input here is libnx pad
+/// only.
 #pragma once
 
 #include "TicoLogger.h"

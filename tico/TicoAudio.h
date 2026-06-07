@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include "TicoConfig.h"
 #include "TicoLogger.h"
 
 /// Thread-safe lock-free ring buffer for audio samples
@@ -121,6 +122,8 @@ public:
         if (m_initialized)
             return true;
 
+        s_instance = this;
+
         if (TicoConfig::USE_SDLQUEUEAUDIO)
         {
             if (deviceId == 0)
@@ -167,6 +170,9 @@ public:
             m_resampler = nullptr;
         }
 
+        if (s_instance == this)
+            s_instance = nullptr;
+
         m_initialized = false;
         LOG_AUDIO("Shutdown complete");
     }
@@ -210,6 +216,9 @@ public:
         if (!m_initialized)
             return;
 
+        int16_t samples[2] = {left, right};
+        MixTrophy(samples, 2);
+
         if (TicoConfig::USE_SDLQUEUEAUDIO)
         {
             // Block if queue full (backpressure)
@@ -217,7 +226,6 @@ public:
             {
                 SDL_Delay(1);
             }
-            int16_t samples[2] = {left, right};
             SDL_QueueAudio(m_deviceId, samples, sizeof(samples));
         }
         else
@@ -227,7 +235,6 @@ public:
             {
                 SDL_Delay(1);
             }
-            int16_t samples[2] = {left, right};
             m_buffer.Write(samples, 2);
         }
     }
@@ -239,6 +246,13 @@ public:
             return 0;
 
         size_t samplesNeeded = frames * CHANNELS;
+        const bool mixTrophy = m_trophyActive.load(std::memory_order_relaxed);
+        if (mixTrophy)
+        {
+            m_mixScratch.assign(data, data + samplesNeeded);
+            MixTrophy(m_mixScratch.data(), samplesNeeded);
+            data = m_mixScratch.data();
+        }
 
         if (TicoConfig::USE_SDLQUEUEAUDIO)
         {
@@ -284,7 +298,100 @@ public:
     void SetPaused(bool paused) { m_paused = paused; }
     bool IsPaused() const { return m_paused; }
 
+    //--------------------------------------------------------------------------
+    // RetroAchievements trophy SFX
+    //
+    // The Switch can't open a second audio device, and the SDL_mixer pull
+    // callback starves under Flycast's load, so we mix a short one-shot chime
+    // into the same SDL_QueueAudio stream as the game. The WAV must already be
+    // SAMPLE_RATE / CHANNELS / S16 (assets/trophy.wav is converted to match).
+    //--------------------------------------------------------------------------
+
+    /// Decode a WAV file (device-free) into the trophy PCM buffer.
+    bool LoadTrophy(const char *path)
+    {
+        SDL_AudioSpec spec;
+        Uint8 *buf = nullptr;
+        Uint32 len = 0;
+        if (!SDL_LoadWAV(path, &spec, &buf, &len))
+        {
+            LOG_ERROR("AUDIO", "Trophy SDL_LoadWAV failed: %s", SDL_GetError());
+            return false;
+        }
+
+        SDL_AudioCVT cvt;
+        int need = SDL_BuildAudioCVT(&cvt, spec.format, spec.channels, spec.freq,
+                                     AUDIO_S16SYS, CHANNELS, SAMPLE_RATE);
+        if (need < 0)
+        {
+            LOG_ERROR("AUDIO", "Trophy SDL_BuildAudioCVT failed: %s", SDL_GetError());
+            SDL_FreeWAV(buf);
+            return false;
+        }
+
+        if (need == 0)
+        {
+            m_trophyPCM.assign(reinterpret_cast<int16_t *>(buf),
+                               reinterpret_cast<int16_t *>(buf + len));
+        }
+        else
+        {
+            cvt.len = static_cast<int>(len);
+            cvt.buf = static_cast<Uint8 *>(SDL_malloc(static_cast<size_t>(len) * cvt.len_mult));
+            if (!cvt.buf)
+            {
+                SDL_FreeWAV(buf);
+                return false;
+            }
+            memcpy(cvt.buf, buf, len);
+            SDL_ConvertAudio(&cvt);
+            m_trophyPCM.assign(reinterpret_cast<int16_t *>(cvt.buf),
+                               reinterpret_cast<int16_t *>(cvt.buf + cvt.len_cvt));
+            SDL_free(cvt.buf);
+        }
+
+        SDL_FreeWAV(buf);
+        LOG_AUDIO("Trophy SFX loaded: %zu samples", m_trophyPCM.size());
+        return true;
+    }
+
+    /// Restart the chime from the beginning (safe to call mid-playback).
+    void PlayTrophy()
+    {
+        if (m_trophyPCM.empty())
+            return;
+        m_trophyCursor.store(0, std::memory_order_relaxed);
+        m_trophyActive.store(true, std::memory_order_relaxed);
+    }
+
+    // Static forwarders so TicoCore can trigger the chime without plumbing a
+    // TicoAudio pointer through the core.
+    static bool LoadTrophyGlobal(const char *path) { return s_instance ? s_instance->LoadTrophy(path) : false; }
+    static void PlayTrophyGlobal() { if (s_instance) s_instance->PlayTrophy(); }
+
 private:
+    /// Mix the active trophy chime into an interleaved S16 block in place.
+    void MixTrophy(int16_t *dst, size_t numSamples)
+    {
+        if (!m_trophyActive.load(std::memory_order_relaxed))
+            return;
+        size_t cursor = m_trophyCursor.load(std::memory_order_relaxed);
+        const size_t total = m_trophyPCM.size();
+        for (size_t i = 0; i < numSamples; ++i)
+        {
+            if (cursor >= total)
+            {
+                m_trophyActive.store(false, std::memory_order_relaxed);
+                break;
+            }
+            int s = static_cast<int>(dst[i]) + static_cast<int>(m_trophyPCM[cursor++]);
+            if (s > 32767) s = 32767;
+            else if (s < -32768) s = -32768;
+            dst[i] = static_cast<int16_t>(s);
+        }
+        m_trophyCursor.store(cursor, std::memory_order_relaxed);
+    }
+
     /// SDL_mixer callback - pulls audio when needed
     static void AudioCallback(void *userdata, uint8_t *stream, int len)
     {
@@ -345,4 +452,13 @@ private:
     bool m_initialized;
     bool m_paused;
     int m_coreSampleRate;
+
+    // Trophy SFX (mixed into the output stream by MixTrophy).
+    std::vector<int16_t> m_trophyPCM;       // interleaved S16 @ SAMPLE_RATE/CHANNELS
+    std::vector<int16_t> m_mixScratch;      // reused mix buffer (queue path)
+    std::atomic<size_t> m_trophyCursor{0};
+    std::atomic<bool> m_trophyActive{false};
+
+    // Set in Init() so TicoCore can reach the live instance for trophy SFX.
+    inline static TicoAudio *s_instance = nullptr;
 };

@@ -228,39 +228,7 @@ if(NINTENDO_SWITCH)
 			target_include_directories(${PROJECT_NAME} PRIVATE ${GLEXT_H_INCLUDE_DIR})
 		endif()
 	else()
-		if(USE_TICO)
-			# StandaloneEntry.cpp holds main(); the shared agnostic Tico::Main
-			# driver + the native-flycast CoreRuntime live in separate TUs.
-			add_executable(${PROJECT_NAME}
-				core/emulator.cpp
-				tico/StandaloneEntry.cpp
-				tico/StandaloneRuntime.cpp
-				tico/TicoMain.cpp
-				tico/TicoChainload.cpp
-				tico/TicoOverlay.cpp
-				tico/TicoTranslationManager.cpp)
-			target_compile_definitions(${PROJECT_NAME} PRIVATE
-				HAVE_LIBNX USE_TICO TICO_STANDALONE
-				IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS)
-			target_include_directories(${PROJECT_NAME} PRIVATE
-				tico
-				shell/switch)
-			set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "tico-flycast-standalone")
-		else()
-			add_executable(${PROJECT_NAME} core/emulator.cpp)
-		endif()
-	endif()
-	if(NOT LIBRETRO AND USE_TICO)
-		# Standalone tico uses the same loaderless NVK stack as the current
-		# libretro frontend, but lets Flycast own the device/swapchain directly.
-		if(NOT DEFINED MESA_NVK_DIR)
-			set(MESA_NVK_DIR "/nvk-build" CACHE PATH "Path to Mesa NVK build")
-		endif()
-		target_link_libraries(${PROJECT_NAME} PRIVATE
-			${MESA_NVK_DIR}/src/nouveau/vulkan/libvulkan.a
-			-ldrm_nouveau
-			-lzstd
-			-lz)
+		add_executable(${PROJECT_NAME} core/emulator.cpp)
 	endif()
 	if(USE_GLES)
 		target_compile_definitions(${PROJECT_NAME} PRIVATE GLES)
@@ -1288,10 +1256,8 @@ else()
 				shell/switch/nswitch.h
 				shell/switch/switch_gamepad.h
 				shell/switch/ucontext.h)
-		if(NOT (USE_TICO AND NOT LIBRETRO))
-			target_sources(${PROJECT_NAME} PRIVATE
-					shell/switch/switch_main.cpp)
-		endif()
+		target_sources(${PROJECT_NAME} PRIVATE
+				shell/switch/switch_main.cpp)
 	endif()
 endif()
 
@@ -2150,30 +2116,15 @@ if(NINTENDO_SWITCH)
 				DEPENDS xxHash::xxhash chdr-static zip ${PROJECT_NAME})
 		endif()
 	else()
-		if(USE_TICO)
-			set(ROMFS_DIR "${CMAKE_CURRENT_BINARY_DIR}/romfs")
-			file(MAKE_DIRECTORY ${ROMFS_DIR})
-			file(COPY "${CMAKE_SOURCE_DIR}/tico/fonts" DESTINATION ${ROMFS_DIR})
-			file(COPY "${CMAKE_SOURCE_DIR}/tico/lang" DESTINATION ${ROMFS_DIR})
-			file(COPY "${CMAKE_SOURCE_DIR}/tico/assets" DESTINATION ${ROMFS_DIR})
-
-			nx_generate_nacp(tico-flycast-standalone.nacp NAME "Flycast" AUTHOR "flyinghead" VERSION "${GIT_VERSION}")
-			nx_create_nro(${PROJECT_NAME} NACP tico-flycast-standalone.nacp ICON "${CMAKE_SOURCE_DIR}/shell/switch/flycast.jpeg" ROMFS ${ROMFS_DIR})
-		else()
-			nx_generate_nacp(flycast.nacp NAME "Flycast" AUTHOR "flyinghead, M4xw" VERSION "${GIT_VERSION}")
-			nx_create_nro(flycast NACP flycast.nacp ICON "${CMAKE_SOURCE_DIR}/shell/switch/flycast.jpeg")
-		endif()
+		nx_generate_nacp(flycast.nacp NAME "Flycast" AUTHOR "flyinghead, M4xw" VERSION "${GIT_VERSION}")
+		nx_create_nro(flycast NACP flycast.nacp ICON "${CMAKE_SOURCE_DIR}/shell/switch/flycast.jpeg")
 	endif()
 endif()
 
 if(IOS)
 	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>-${CMAKE_OSX_SYSROOT}/Flycast.ipa" TYPE BIN)
 elseif(NINTENDO_SWITCH AND NOT LIBRETRO)
-	if(USE_TICO)
-		install(FILES ${CMAKE_BINARY_DIR}/tico-flycast-standalone.nro DESTINATION "${CMAKE_INSTALL_BINDIR}")
-	else()
-		install(FILES ${CMAKE_BINARY_DIR}/flycast.nro DESTINATION "${CMAKE_INSTALL_BINDIR}")
-	endif()
+	install(FILES ${CMAKE_BINARY_DIR}/flycast.nro DESTINATION "${CMAKE_INSTALL_BINDIR}")
 elseif(LIBRETRO)
 	install(TARGETS ${PROJECT_NAME} DESTINATION "${CMAKE_INSTALL_LIBDIR}/libretro")
 else()

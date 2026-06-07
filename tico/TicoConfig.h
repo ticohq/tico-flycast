@@ -21,8 +21,11 @@ namespace TicoConfig {
     constexpr float FONT_SIZE = 32.0f;
 
     // Audio backend configuration
-    // true = Use SDL_QueueAudio (Push model, better for Flycast)
-    // false = Use Mix_HookMusic + RingBuffer (Callback model, better for other cores)
+    // true  = SDL_QueueAudio (Push model). Used on Flycast: the DC+Vulkan load
+    //         starves the SDL_mixer pull-callback in Callback mode, causing
+    //         choppy game audio. The RA trophy chime is mixed into this queue
+    //         manually by TicoAudio (no second device, which the Switch can't do).
+    // false = Mix_HookMusic + RingBuffer (Callback model, used by lighter cores).
     constexpr bool USE_SDLQUEUEAUDIO = true;
 }
 

@@ -555,6 +555,82 @@ void TicoOverlay::RenderSocialArea(ImDrawList *dl, ImVec2 displaySize)
     }
 }
 
+void TicoOverlay::GetGameViewport(float screenW, float screenH, float coreAspect,
+                                  float &outX, float &outY, float &outW, float &outH) const
+{
+    // Dreamcast base resolution (most common mode) — mirrors RenderGame().
+    static constexpr int DC_BASE_W = 640;
+    static constexpr int DC_BASE_H = 480;
+
+    float dstWidth = screenW;
+    float dstHeight = screenH;
+
+    if (m_displayMode == FlycastDisplayMode::Integer)
+    {
+        int scale;
+        if (m_displaySize == FlycastDisplaySize::Auto)
+        {
+            int scaleX = (int)screenW / DC_BASE_W;
+            int scaleY = (int)screenH / DC_BASE_H;
+            scale = (scaleX < scaleY) ? scaleX : scaleY;
+            if (scale < 1)
+                scale = 1;
+        }
+        else
+        {
+            // _1x=4 → scale 1, _2x=5 → scale 2
+            scale = (int)m_displaySize - 3;
+            if (scale < 1)
+                scale = 1;
+        }
+        dstWidth = (float)(DC_BASE_W * scale);
+        dstHeight = (float)(DC_BASE_H * scale);
+        if (dstWidth > screenW)
+            dstWidth = screenW;
+        if (dstHeight > screenH)
+            dstHeight = screenH;
+    }
+    else
+    {
+        const float dstAspect = screenW / screenH;
+        float ar;
+        switch (m_displaySize)
+        {
+        case FlycastDisplaySize::Stretch:
+            outX = 0.0f;
+            outY = 0.0f;
+            outW = screenW;
+            outH = screenH;
+            return;
+        case FlycastDisplaySize::_4_3:
+            ar = 4.0f / 3.0f;
+            break;
+        case FlycastDisplaySize::_16_9:
+            ar = 16.0f / 9.0f;
+            break;
+        case FlycastDisplaySize::Original:
+        default:
+            ar = (coreAspect > 0.0f) ? coreAspect : (4.0f / 3.0f);
+            break;
+        }
+        if (ar > dstAspect)
+        {
+            dstWidth = screenW;
+            dstHeight = screenW / ar;
+        }
+        else
+        {
+            dstHeight = screenH;
+            dstWidth = screenH * ar;
+        }
+    }
+
+    outW = dstWidth;
+    outH = dstHeight;
+    outX = (screenW - dstWidth) / 2.0f;
+    outY = (screenH - dstHeight) / 2.0f;
+}
+
 void TicoOverlay::RenderGame(ImDrawList *dl, ImVec2 displaySize, unsigned int texture,
                              float aspectRatio, int width, int height,
                              int fboWidth, int fboHeight)
@@ -786,7 +862,7 @@ void TicoOverlay::RenderTitleCard(ImDrawList *dl, ImVec2 displaySize)
 void TicoOverlay::RenderQuickMenu(ImDrawList *dl, ImVec2 displaySize)
 {
     float scale = OverlayScale();
-    const float menuWidth = 320.0f * scale;
+    const float menuWidth = 400.0f * scale;
 
     std::string menuItems[] = {
         tr("emulator_save_state"),
@@ -904,7 +980,7 @@ void TicoOverlay::RenderQuickMenu(ImDrawList *dl, ImVec2 displaySize)
 void TicoOverlay::RenderSaveStatesMenu(ImDrawList *dl, ImVec2 displaySize)
 {
     float scale = OverlayScale();
-    const float menuWidth = 320.0f * scale;
+    const float menuWidth = 400.0f * scale;
     const int numSlots = 4;
     const float itemHeight = 64.0f * scale;
     const float contentHeight = numSlots * itemHeight; // Flush
@@ -1016,7 +1092,7 @@ void TicoOverlay::RenderSaveStatesMenu(ImDrawList *dl, ImVec2 displaySize)
 void TicoOverlay::RenderSettingsMenu(ImDrawList *dl, ImVec2 displaySize)
 {
     float scale = OverlayScale();
-    const float menuWidth = 320.0f * scale;
+    const float menuWidth = 400.0f * scale;
     int numItems = 2; // Display Mode + Size
 
     const float itemHeight = 64.0f * scale;
@@ -1355,7 +1431,10 @@ bool TicoOverlay::HandleInput(const Tico::FrameInput &input)
         m_discSelection = 0;
         m_discScrollY = 0.0f;
         m_discTargetScrollY = 0.0f;
-        m_animTimer = 0.0f;
+        // Submenu transition: keep the slide-in complete so the persistent
+        // chrome (social area, status bar, controls) doesn't re-animate; only
+        // the initial open from gameplay animates. Matches the other cores.
+        m_animTimer = 0.4f;
         return true;
     }
 
@@ -1491,17 +1570,17 @@ bool TicoOverlay::HandleInput(const Tico::FrameInput &input)
             case 0: // Save State
                 m_isSaveMode = true;
                 m_currentMenu = OverlayMenu::SaveStates;
-                m_animTimer = 0.0f;
+                m_animTimer = 0.4f;
                 break;
             case 1: // Load State
                 m_isSaveMode = false;
                 m_currentMenu = OverlayMenu::SaveStates;
-                m_animTimer = 0.0f;
+                m_animTimer = 0.4f;
                 break;
             case 2: // Settings
                 m_currentMenu = OverlayMenu::Settings;
                 m_settingsSelection = 0;
-                m_animTimer = 0.0f;
+                m_animTimer = 0.4f;
                 break;
             case 3: // Exit
                 m_shouldExit = true;
@@ -1903,7 +1982,7 @@ void TicoOverlay::ScanForDiscs()
 void TicoOverlay::RenderDiscMenu(ImDrawList *dl, ImVec2 displaySize)
 {
     float scale = OverlayScale();
-    const float menuWidth = 320.0f * scale;
+    const float menuWidth = 400.0f * scale;
     const float itemHeight = 64.0f * scale;
     const int numItems = m_discs.empty() ? 1 : (int)m_discs.size();
 
@@ -2409,9 +2488,60 @@ void TicoOverlay::RenderStatusBar(ImDrawList *dl, ImVec2 displaySize)
 //==============================================================================
 
 void TicoOverlay::EnsureRAIconLoaded() {
-    // The RA icon/badge textures are owned and uploaded by the host (libretro
-    // TicoCore); the overlay just resolves cached ids in ResolveNotificationTextures.
-    m_raIconLoadAttempted = true;
+    // Rasterize assets/ra.svg once and upload it through the host so RA toasts
+    // (the "Playing:" session toast, mastered/leaderboard alerts) have an icon,
+    // matching the other Tico cores. Badge textures for individual achievements
+    // are still uploaded by the host on demand; this only owns the generic icon.
+    if (!m_host)
+        return;
+    IOverlayRAHost *ra = m_host->RA();
+    if (!ra)
+        return;                       // standalone path: no RA host
+    if (ra->IconTexture() != 0)
+        return;                       // already uploaded
+
+    // Retry every frame until the overlay backend is ready (CreateTextureRGBA
+    // returns 0 before the Vulkan overlay is up); cheap until it succeeds.
+#ifdef __SWITCH__
+    const char *svgPath = "romfs:/assets/ra.svg";
+#else
+    const char *svgPath = "tico/assets/ra.svg";
+#endif
+    NSVGimage *image = nsvgParseFromFile(svgPath, "px", 96);
+    if (!image)
+        return;
+
+    float scale = 64.0f / image->height;
+    int w = (int)(image->width * scale);
+    int h = (int)(image->height * scale);
+    if (w <= 0 || h <= 0) {
+        nsvgDelete(image);
+        return;
+    }
+
+    NSVGrasterizer *rast = nsvgCreateRasterizer();
+    if (!rast) {
+        nsvgDelete(image);
+        return;
+    }
+
+    unsigned char *img = (unsigned char *)malloc((size_t)w * h * 4);
+    if (!img) {
+        nsvgDeleteRasterizer(rast);
+        nsvgDelete(image);
+        return;
+    }
+
+    nsvgRasterize(rast, image, 0, 0, scale, img, w, h, w * 4);
+    ImTextureID tex = m_host->CreateTextureRGBA(img, w, h);
+    if (tex != 0) {
+        ra->SetIconTexture(tex);
+        m_raIconLoadAttempted = true;
+    }
+
+    free(img);
+    nsvgDeleteRasterizer(rast);
+    nsvgDelete(image);
 }
 
 void TicoOverlay::ResolveNotificationTextures() {
@@ -2429,7 +2559,7 @@ void TicoOverlay::ResolveNotificationTextures() {
             n.textureId = ra->IconTexture();
         } else {
             // Only check the in-memory texture cache — NO disk I/O, NO stbi_load.
-            unsigned int t = ra->BadgeTexture(n.badge_name);
+            ImTextureID t = ra->BadgeTexture(n.badge_name);
             if (t != 0)
                 n.textureId = t;
             // If not cached yet, leave textureId=0; the badge appears once the
@@ -2540,7 +2670,7 @@ void TicoOverlay::RenderRAAlerts(ImDrawList *dl, ImVec2 displaySize, float delta
             ImVec2 bMin(drawBadgeX, drawBadgeY);
             ImVec2 bMax(drawBadgeX + drawBadgeSize, drawBadgeY + drawBadgeSize);
             ImU32 imgCol = IM_COL32(255, 255, 255, alpha);
-            dl->AddImageRounded((ImTextureID)(uintptr_t)n.textureId,
+            dl->AddImageRounded(n.textureId,
                 bMin, bMax, ImVec2(0,0), ImVec2(1,1), imgCol, badgeRadius);
             
             textX = badgeX + badgeSize + badgeMargin;

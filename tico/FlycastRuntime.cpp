@@ -72,12 +72,12 @@ public:
     std::mutex &Mutex() override { return core_->m_raCallbackMutex; }
     std::vector<RANotification> &Notifications() override { return core_->m_raNotifications; }
     RAAlertPosition AlertPosition() const override { return core_->m_raAlertPosition; }
-    unsigned int IconTexture() const override { return core_->m_raIconTexture; }
-    void SetIconTexture(unsigned int tex) override { core_->m_raIconTexture = tex; }
-    unsigned int BadgeTexture(const std::string &badge) const override
+    ImTextureID IconTexture() const override { return core_->m_raIconTexture; }
+    void SetIconTexture(ImTextureID tex) override { core_->m_raIconTexture = tex; }
+    ImTextureID BadgeTexture(const std::string &badge) const override
     {
         auto it = core_->m_raBadgeCache.find(badge);
-        return it != core_->m_raBadgeCache.end() ? it->second : 0u;
+        return it != core_->m_raBadgeCache.end() ? it->second : (ImTextureID)0;
     }
 
 private:
@@ -463,6 +463,29 @@ void FlycastRuntime::RenderFrame()
         deltaTime = 1.0f / 60.0f;
 
     RenderOverlayFrame(deltaTime);
+
+    // Apply the overlay's screen-size / display-mode selection to the game blit.
+    // The game image is composited by TicoVulkan (not ImGui), so the destination
+    // rect has to be handed to it here; otherwise it always fills the screen.
+    if (overlay_)
+    {
+        uint32_t sw = 0, sh = 0;
+        TicoVulkan::GetSwapExtent(sw, sh);
+        if (sw > 0 && sh > 0)
+        {
+            const float coreAspect = core_ ? core_->GetAspectRatio() : (4.0f / 3.0f);
+            float vx = 0.0f, vy = 0.0f, vw = 0.0f, vh = 0.0f;
+            overlay_->GetGameViewport(static_cast<float>(sw), static_cast<float>(sh),
+                                      coreAspect, vx, vy, vw, vh);
+            TicoVulkan::SetGameViewport(static_cast<int>(vx + 0.5f), static_cast<int>(vy + 0.5f),
+                                        static_cast<int>(vw + 0.5f), static_cast<int>(vh + 0.5f));
+        }
+    }
+    else
+    {
+        TicoVulkan::SetGameViewport(0, 0, 0, 0); // full screen
+    }
+
     TicoVulkan::EndFrame();
     frameInFlight_ = false;
 }

@@ -4,6 +4,7 @@
 
 #include "TicoCore.h"
 #include "TicoConfig.h"
+#include "TicoAudio.h"
 #include "json.hpp"
 #include <SDL.h>
 #include <SDL_mixer.h>
@@ -420,11 +421,6 @@ TicoCore::~TicoCore()
     }
 
     StopRAWorker();
-
-    if (m_trophySound) {
-        Mix_FreeChunk(m_trophySound);
-        m_trophySound = nullptr;
-    }
 }
 
 //==============================================================================
@@ -441,16 +437,6 @@ bool TicoCore::Init()
     // Load configuration to ensure variables are ready for init
     LoadConfig();
     LoadRAConfig();
-#ifdef __SWITCH__
-    if (m_raEnabled) {
-        LOG_CORE("RA: Disabled on Switch during Vulkan bring-up");
-    }
-    m_raEnabled = false;
-    m_raUsername.clear();
-    m_raToken.clear();
-    m_raPassword.clear();
-    m_raHardcore = false;
-#endif
     LOG_CORE("Config loaded, %lu options", m_configOptions.size());
 
     // Load trophy sound if audio is enabled
@@ -471,13 +457,16 @@ bool TicoCore::Init()
         audioIn.close();
     }
     if (soundEnabled) {
+        // The chime is mixed into the game's audio stream by TicoAudio (the
+        // Switch can't open a second audio device), so it must be a WAV that
+        // SDL_LoadWAV can decode device-free. See assets/trophy.wav.
 #ifdef __SWITCH__
-        m_trophySound = Mix_LoadWAV("romfs:/assets/trophy.mp3");
+        const char *trophyPath = "romfs:/assets/trophy.wav";
 #else
-        m_trophySound = Mix_LoadWAV("tico/assets/trophy.mp3");
+        const char *trophyPath = "tico/assets/trophy.wav";
 #endif
-        if (m_trophySound) LOG_CORE("RA: Loaded trophy.mp3 successfully.");
-        else LOG_CORE("RA: Failed to load trophy.mp3 -> %s", Mix_GetError());
+        if (TicoAudio::LoadTrophyGlobal(trophyPath)) LOG_CORE("RA: Loaded trophy.wav successfully.");
+        else LOG_CORE("RA: Failed to load trophy.wav");
     }
 
     // Set environment callback before init
@@ -500,17 +489,13 @@ bool TicoCore::Init()
                             std::string desc = event->achievement->description;
                             std::string badge = event->achievement->badge_name;
                             s_instance->PushRANotification(title, desc, badge);
-                            if (s_instance->m_trophySound) {
-                                Mix_PlayChannel(-1, s_instance->m_trophySound, 0);
-                            }
+                            TicoAudio::PlayTrophyGlobal();
                             LOG_CORE("RA: Achievement triggered: %s (badge: %s)", title.c_str(), badge.c_str());
                         }
                         break;
                     case RC_CLIENT_EVENT_GAME_COMPLETED:
                         s_instance->PushRANotification("Game Mastered!", "All achievements unlocked!", "ra_icon");
-                        if (s_instance->m_trophySound) {
-                            Mix_PlayChannel(-1, s_instance->m_trophySound, 0);
-                        }
+                        TicoAudio::PlayTrophyGlobal();
                         break;
                     case RC_CLIENT_EVENT_LEADERBOARD_SUBMITTED:
                         if (event->leaderboard) {
@@ -1830,7 +1815,7 @@ void TicoCore::PreloadRABadges() {
     LOG_CORE("RA: Badge preloading skipped (lazy-load on demand)");
 }
 
-unsigned int TicoCore::GetRABadgeTexture(const std::string& badge_name) {
+ImTextureID TicoCore::GetRABadgeTexture(const std::string& badge_name) {
     // Check in-memory cache first
     auto it = m_raBadgeCache.find(badge_name);
     if (it != m_raBadgeCache.end()) return it->second;
@@ -1897,9 +1882,46 @@ void TicoCore::DownloadAndCacheBadge(const std::string& badge_name, bool execute
 }
 
 void TicoCore::ProcessPendingBadgeUploads() {
-    // Vulkan path: no overlay in v1, so we drop pending badge uploads on
-    // the floor. Logic is kept around so a future Vulkan overlay can
-    // wire imgui_impl_vulkan textures back in.
-    std::lock_guard<std::mutex> lock(m_raBadgeUploadMutex);
-    m_raPendingBadgeUploads.clear();
+    // Runs on the main thread (RunFrame), the only place the Vulkan overlay
+    // texture path is safe to touch. Decode each downloaded badge PNG and
+    // upload it as an overlay texture so RA toasts show the achievement art.
+    std::vector<std::pair<std::string, std::vector<unsigned char>>> uploads;
+    {
+        std::lock_guard<std::mutex> lock(m_raBadgeUploadMutex);
+        if (m_raPendingBadgeUploads.empty())
+            return;
+        // Cap per-frame work so a burst of unlocks doesn't stall the GPU.
+        size_t count = std::min(m_raPendingBadgeUploads.size(), (size_t)2);
+        uploads.assign(std::make_move_iterator(m_raPendingBadgeUploads.begin()),
+                       std::make_move_iterator(m_raPendingBadgeUploads.begin() + count));
+        m_raPendingBadgeUploads.erase(m_raPendingBadgeUploads.begin(),
+                                      m_raPendingBadgeUploads.begin() + count);
+    }
+
+    for (auto& upload : uploads) {
+        const std::string& name = upload.first;
+        if (upload.second.empty() || m_raBadgeCache.count(name))
+            continue;
+
+        int w = 0, h = 0, comp = 0;
+        unsigned char* pixels = stbi_load_from_memory(
+            upload.second.data(), (int)upload.second.size(), &w, &h, &comp, 4);
+        if (!pixels) {
+            LOG_CORE("RA: Badge decode failed: %s (%s)", name.c_str(), stbi_failure_reason());
+            continue;
+        }
+
+        ImTextureID tex = 0;
+#ifdef __SWITCH__
+        tex = TicoVulkan::CreateOverlayTextureRGBA(pixels, (uint32_t)w, (uint32_t)h);
+#endif
+        stbi_image_free(pixels);
+
+        if (tex) {
+            m_raBadgeCache[name] = tex;
+            LOG_CORE("RA: Badge uploaded: %s (%dx%d)", name.c_str(), w, h);
+        } else {
+            LOG_CORE("RA: Badge texture creation failed: %s", name.c_str());
+        }
+    }
 }

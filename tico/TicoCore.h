@@ -195,7 +195,6 @@ private:
     void SaveRAToken(const std::string& token);
     static void RAIdentifyGame(rc_client_t* c, TicoCore* core);
 
-    Mix_Chunk* m_trophySound = nullptr;
     static void RALoginWithPassword(rc_client_t* c, TicoCore* core);
 
 public:
@@ -205,11 +204,12 @@ public:
     void PushRANotification(const std::string& title, const std::string& desc,
                            const std::string& badge = "");
 
-    // RA badge cache (badge_name -> GL texture)
-    std::map<std::string, unsigned int> m_raBadgeCache;
-    unsigned int m_raIconTexture = 0;        // ra.svg icon
+    // RA badge cache (badge_name -> overlay texture). ImTextureID is 64-bit so
+    // it can hold a Vulkan VkDescriptorSet handle without truncation.
+    std::map<std::string, ImTextureID> m_raBadgeCache;
+    ImTextureID m_raIconTexture = 0;         // ra.svg icon
     void* m_raHashDisc = nullptr;            // Pre-opened Disc* for RA hashing (avoids concurrent file access)
-    unsigned int GetRABadgeTexture(const std::string& badge_name);
+    ImTextureID GetRABadgeTexture(const std::string& badge_name);
     void DownloadAndCacheBadge(const std::string& badge_name, bool execute_now = false); // runs on worker
     void PreloadRABadges();                   // called after game identification
     std::vector<std::pair<std::string, std::vector<unsigned char>>> m_raPendingBadgeUploads;

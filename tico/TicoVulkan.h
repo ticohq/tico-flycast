@@ -63,6 +63,12 @@ void GetSwapExtent(uint32_t& width, uint32_t& height);
 // to take it from retro_video_refresh_t (called right after set_image).
 void SetSourceExtent(uint32_t width, uint32_t height);
 
+// Destination rect (in swapchain pixels) the game image is blitted into. The
+// area outside it is cleared to black (letterbox/pillarbox). Pass w<=0 or h<=0
+// to fill the whole swapchain (the default). Lets the overlay's screen-size /
+// display-mode selection actually affect the presented game.
+void SetGameViewport(int x, int y, int width, int height);
+
 // True once the device + swapchain are ready (post-CreateDeviceAndSwapchain).
 bool IsReady();
 

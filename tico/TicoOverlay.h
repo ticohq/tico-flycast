@@ -57,6 +57,14 @@ public:
     void Render(ImVec2 displaySize, unsigned int gameTexture, float aspectRatio,
                 int frameWidth, int frameHeight, int fboWidth = 0, int fboHeight = 0);
 
+    /// @brief Compute the on-screen game viewport for the current display
+    /// mode/size. Returns the rect (x,y,w,h) in pixels within a screenW×screenH
+    /// surface; coreAspect is the core's reported aspect ratio. The libretro
+    /// path uses this to letterbox the Vulkan blit, since the game image is
+    /// composited by TicoVulkan rather than drawn through ImGui.
+    void GetGameViewport(float screenW, float screenH, float coreAspect,
+                         float &outX, float &outY, float &outW, float &outH) const;
+
     /// @brief Handle neutralized input
     /// @return true if input was consumed by overlay
     bool HandleInput(const Tico::FrameInput &input);

@@ -28,12 +28,6 @@ void gui_open_settings();
 void gui_display_ui();
 void gui_draw_osd();
 void gui_display_osd();
-// Tico: when true, gui_draw_osd() draws none of flycast's native OSD (FPS,
-// toasts, lua, on-screen gamepad) — an external overlay owns the screen.
-void gui_set_suppress_native_osd(bool suppress);
-// Tico: optional hook invoked at the end of gui_initFonts() so an external
-// overlay can add its own fonts to the shared atlas before it is built.
-void gui_set_font_hook(void (*hook)());
 void gui_display_profiler();
 void gui_open_onboarding();
 void gui_term();

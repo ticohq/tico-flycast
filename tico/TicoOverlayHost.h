@@ -29,7 +29,7 @@ struct RANotification
     std::string title;
     std::string description;
     std::string badge_name;     // badge id, or "ra_icon" for the session toast
-    unsigned int textureId = 0; // resolved by the overlay from the host's cache
+    ImTextureID textureId = 0;  // resolved by the overlay from the host's cache
     float timer = 0.0f;
     float duration = 4.0f;
     float slideIn = 0.4f;
@@ -46,9 +46,9 @@ public:
     virtual std::mutex &Mutex() = 0;
     virtual std::vector<RANotification> &Notifications() = 0;
     virtual RAAlertPosition AlertPosition() const = 0;
-    virtual unsigned int IconTexture() const = 0;
-    virtual void SetIconTexture(unsigned int tex) = 0;
-    virtual unsigned int BadgeTexture(const std::string &badge) const = 0; // 0 if absent
+    virtual ImTextureID IconTexture() const = 0;
+    virtual void SetIconTexture(ImTextureID tex) = 0;
+    virtual ImTextureID BadgeTexture(const std::string &badge) const = 0; // 0 if absent
 };
 
 /// Everything the overlay needs from the emulator + renderer, abstracted so the

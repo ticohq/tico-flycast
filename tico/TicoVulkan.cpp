@@ -85,6 +85,7 @@ vk::SwapchainKHR    s_swapchain;
 vk::Format          s_swapFormat = vk::Format::eUndefined;
 vk::Extent2D        s_swapExtent;
 vk::Extent2D        s_sourceExtent;  // last frame extent from video_refresh
+vk::Rect2D          s_gameViewport{{0, 0}, {0, 0}};  // game blit dst; 0 extent => full swap
 std::vector<vk::Image>     s_swapImages;
 std::vector<vk::ImageView> s_swapImageViews;
 vk::RenderPass     s_overlayRenderPass;
@@ -834,6 +835,37 @@ void EndFrame()
         const uint32_t srcW = s_sourceExtent.width  ? s_sourceExtent.width  : s_swapExtent.width;
         const uint32_t srcH = s_sourceExtent.height ? s_sourceExtent.height : s_swapExtent.height;
 
+        // Destination rect: the overlay's screen-size/display-mode selection,
+        // or the full swapchain when none is set. When it doesn't cover the
+        // whole image we clear to black first so the border bars are clean.
+        int32_t dstX0 = 0, dstY0 = 0;
+        int32_t dstX1 = static_cast<int32_t>(s_swapExtent.width);
+        int32_t dstY1 = static_cast<int32_t>(s_swapExtent.height);
+        const bool letterbox =
+            s_gameViewport.extent.width > 0 && s_gameViewport.extent.height > 0 &&
+            (s_gameViewport.offset.x != 0 || s_gameViewport.offset.y != 0 ||
+             s_gameViewport.extent.width != s_swapExtent.width ||
+             s_gameViewport.extent.height != s_swapExtent.height);
+        if (letterbox)
+        {
+            dstX0 = s_gameViewport.offset.x;
+            dstY0 = s_gameViewport.offset.y;
+            dstX1 = dstX0 + static_cast<int32_t>(s_gameViewport.extent.width);
+            dstY1 = dstY0 + static_cast<int32_t>(s_gameViewport.extent.height);
+
+            vk::ClearColorValue clear(std::array<float, 4>{0.f, 0.f, 0.f, 1.f});
+            vk::ImageSubresourceRange range(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+            f.cmd.clearColorImage(swapImage, vk::ImageLayout::eTransferDstOptimal, clear, range);
+
+            // The clear writes the whole image and the blit overwrites the
+            // inner rect — order the two transfer writes.
+            vk::MemoryBarrier mb(vk::AccessFlagBits::eTransferWrite,
+                                 vk::AccessFlagBits::eTransferWrite);
+            f.cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                  vk::PipelineStageFlagBits::eTransfer,
+                                  {}, mb, {}, {});
+        }
+
         vk::ImageBlit blit;
         blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
         blit.srcSubresource.mipLevel = 0;
@@ -843,9 +875,8 @@ void EndFrame()
         blit.srcOffsets[1] = vk::Offset3D(static_cast<int32_t>(srcW),
                                           static_cast<int32_t>(srcH), 1);
         blit.dstSubresource = blit.srcSubresource;
-        blit.dstOffsets[0] = vk::Offset3D(0, 0, 0);
-        blit.dstOffsets[1] = vk::Offset3D(static_cast<int32_t>(s_swapExtent.width),
-                                          static_cast<int32_t>(s_swapExtent.height), 1);
+        blit.dstOffsets[0] = vk::Offset3D(dstX0, dstY0, 0);
+        blit.dstOffsets[1] = vk::Offset3D(dstX1, dstY1, 1);
 
         f.cmd.blitImage(coreImage, vk::ImageLayout::eTransferSrcOptimal,
                         swapImage, vk::ImageLayout::eTransferDstOptimal,
@@ -1249,6 +1280,15 @@ void SetSourceExtent(uint32_t width, uint32_t height)
 {
     s_sourceExtent.width = width;
     s_sourceExtent.height = height;
+}
+
+void SetGameViewport(int x, int y, int width, int height)
+{
+    if (width <= 0 || height <= 0)
+        s_gameViewport = vk::Rect2D{{0, 0}, {0, 0}};  // 0 extent => full swapchain
+    else
+        s_gameViewport = vk::Rect2D{{x, y}, {static_cast<uint32_t>(width),
+                                             static_cast<uint32_t>(height)}};
 }
 
 }  // namespace TicoVulkan
