@@ -1,6 +1,6 @@
 #include "types.h"
 
-#if defined(__unix__) || defined(__APPLE__) || defined(__SWITCH__)
+#if defined(__unix__) || defined(__APPLE__) || defined(__SWITCH__) || defined(__HAIKU__)
 #if defined(__APPLE__)
 	#define _XOPEN_SOURCE 1
 	#define __USE_GNU 1
@@ -111,7 +111,7 @@ void os_UninstallFaultHandler()
 #endif
 }
 
-#if !defined(__unix__) && !defined(LIBRETRO) && !defined(__SWITCH__)
+#if !defined(__unix__) && !defined(LIBRETRO) && !defined(__SWITCH__) && !defined(__HAIKU__)
 [[noreturn]] void os_DebugBreak()
 {
 	__builtin_trap();
@@ -171,7 +171,7 @@ void common_linux_setup()
 	signal(SIGINT, sigintHandler);
 #endif
 	
-	DEBUG_LOG(BOOT, "Linux paging: %ld %08X %08X", sysconf(_SC_PAGESIZE), PAGE_SIZE, PAGE_MASK);
+	DEBUG_LOG(BOOT, "Linux paging: sysconf %ld PAGE_SIZE %ld PAGE_MASK %lX", sysconf(_SC_PAGESIZE), (unsigned long)PAGE_SIZE, (long)PAGE_MASK);
 	verify(PAGE_MASK==(sysconf(_SC_PAGESIZE)-1));
 }
 

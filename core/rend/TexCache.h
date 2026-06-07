@@ -17,6 +17,7 @@
 #pragma once
 #include "oslib/oslib.h"
 #include "hw/pvr/Renderer_if.h"
+#include "hw/pvr/ta_ctx.h"
 #include "cfg/option.h"
 #include "texconv.h"
 #include "CustomTexture.h"
@@ -47,7 +48,7 @@ void UpscalexBRZ(int factor, u32* source, u32* dest, int width, int height, bool
 class BaseTextureCacheData
 {
 protected:
-	BaseTextureCacheData(TSP tsp, TCW tcw);
+	BaseTextureCacheData(TSP tsp, TCW tcw, int area);
 
 public:
 	BaseTextureCacheData(BaseTextureCacheData&& other)
@@ -76,6 +77,7 @@ public:
 		custom_height = other.custom_height;
 		custom_load_in_progress = 0;
 		gpuPalette = other.gpuPalette;
+		area = other.area;
 	}
 
 	TSP tsp;        	//dreamcast texture parameters
@@ -108,7 +110,9 @@ public:
 	u32 custom_width;
 	u32 custom_height;
 	std::atomic_int custom_load_in_progress;
+	bool is_custom_replaced;	// True if the texture currently on the GPU is the custom replacement
 	bool gpuPalette;
+	u8 area;
 
 	void PrintTextureName();
 	virtual std::string GetId() = 0;
@@ -156,17 +160,20 @@ public:
 	void unprotectVRam();
 	void invalidate();
 
-	static bool IsGpuHandledPaletted(TSP tsp, TCW tcw)
+	static bool IsGpuHandledPaletted(TSP tsp, TCW tcw, int area)
 	{
 		// Some palette textures are handled on the GPU
 		// This is currently limited to textures using nearest or bilinear filtering and not mipmapped.
+		// In 2-volume mode, only area 0 can be handled on the gpu.
 		// Enabling texture upscaling or dumping also disables this mode.
 		return (tcw.PixelFmt == PixelPal4 || tcw.PixelFmt == PixelPal8)
 				&& config::TextureUpscale == 1
 				&& !config::DumpTextures
+				&& !custom_texture.enabled()
 				&& tsp.FilterMode <= 1
 				&& !tcw.MipMapped
-				&& !tcw.VQ_Comp;
+				&& !tcw.VQ_Comp
+				&& area == 0;
 	}
 	static void SetDirectXColorOrder(bool enabled);
 };
@@ -175,12 +182,12 @@ template<typename Texture>
 class BaseTextureCache
 {
 public:
-	Texture *getTextureCacheData(TSP tsp, TCW tcw)
+	Texture *getTextureCacheData(TSP tsp, TCW tcw, int area)
 	{
 		u64 key = tsp.full & TSPTextureCacheMask.full;
 		if (tcw.PixelFmt == PixelPal4 || tcw.PixelFmt == PixelPal8)
 		{
-			if (BaseTextureCacheData::IsGpuHandledPaletted(tsp, tcw))
+			if (BaseTextureCacheData::IsGpuHandledPaletted(tsp, tcw, area))
 				// texaddr, pixelfmt, VQ, MipMap
 				key |= (u64)(tcw.full & TCWPalTextureCacheMask.full) << 32;
 			else
@@ -204,7 +211,7 @@ public:
 		}
 		else //create if not existing
 		{
-			texture = &cache.emplace(std::make_pair(key, Texture(tsp, tcw))).first->second;
+			texture = &cache.emplace(std::make_pair(key, Texture(tsp, tcw, area))).first->second;
 		}
 
 		return texture;
@@ -231,7 +238,7 @@ public:
 		for (tsp.TexU = 0; tsp.TexU <= 7 && (8u << tsp.TexU) < width; tsp.TexU++);
 		for (tsp.TexV = 0; tsp.TexV <= 7 && (8u << tsp.TexV) < height; tsp.TexV++);
 
-		return getTextureCacheData(tsp, tcw);
+		return getTextureCacheData(tsp, tcw, 0);
 	}
 
 	void CollectCleanup()
@@ -258,7 +265,6 @@ public:
 
 	void Clear()
 	{
-		custom_texture.Terminate();
 		for (auto& [id, texture] : cache)
 			texture.Delete();
 
@@ -282,12 +288,11 @@ void ReadFramebuffer(const FramebufferInfo& info, PixelBuffer<u32>& pb, int& wid
 
 // width and height in pixels. linestride in bytes
 template<int Red = 0, int Green = 1, int Blue = 2, int Alpha = 3>
-void WriteFramebuffer(u32 width, u32 height, const u8 *data, u32 dstAddr, FB_W_CTRL_type fb_w_ctrl, u32 linestride, FB_X_CLIP_type xclip, FB_Y_CLIP_type yclip);
+void WriteFramebuffer(u32 width, u32 height, const u8 *data, u32 dstAddr, FB_W_CTRL_type fb_w_ctrl, u32 linestride, const Rect& clip);
 
 // width and height in pixels. linestride in bytes
 template<int Red = 0, int Green = 1, int Blue = 2, int Alpha = 3>
-void WriteTextureToVRam(u32 width, u32 height, const u8 *data, u16 *dst, FB_W_CTRL_type fb_w_ctrl, u32 linestride);
-void getRenderToTextureDimensions(u32& width, u32& height, u32& pow2Width, u32& pow2Height);
+void WriteTextureToVRam(u32 width, u32 height, const u8 *data, u16 *dst, FB_W_CTRL_type fb_w_ctrl, u32 linestride, const Rect& clip);
 
 static inline void MakeFogTexture(u8 *tex_data)
 {

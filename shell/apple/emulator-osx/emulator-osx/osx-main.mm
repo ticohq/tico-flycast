@@ -20,9 +20,13 @@
 #endif
 #include "stdclass.h"
 #include "oslib/oslib.h"
+#include "oslib/i18n.h"
 #include "emulator.h"
 #include "ui/mainui.h"
+#include "ui/gui.h"
+#include "SDLApplicationDelegate.h"
 #include <future>
+#include <exception>
 
 int darw_printf(const char* text, ...)
 {
@@ -53,6 +57,11 @@ void os_DoEvents() {
 #if defined(USE_SDL)
 	NSMenuItem *editMenuItem = [[NSApp mainMenu] itemAtIndex:1];
 	[editMenuItem setEnabled:SDL_IsTextInputActive()];
+
+	NSMenuItem *toggleMenuItem = [[[[NSApp mainMenu] itemAtIndex:0] submenu] itemWithTag:MENU_TAG_TOGGLE_MENU];
+	if (toggleMenuItem) {
+		[toggleMenuItem setEnabled:emu.running() || gui_state == GuiState::Commands];
+	}
 #endif
 }
 
@@ -105,9 +114,10 @@ extern "C" int SDL_main(int argc, char *argv[])
     CFRelease(resourcesURL);
     CFRelease(mainBundle);
 
-	emu_flycast_init();
+	if (emu_flycast_init() != 0)
+		return 1;
 	
-	int boardId = cfgLoadInt("naomi", "BoardId", 0);
+	int boardId = config::loadInt("naomi", "BoardId");
 	if (boardId > 0)
 	{
 		NSString *label = @"S";		// Slave
@@ -131,7 +141,13 @@ extern "C" int SDL_main(int argc, char *argv[])
 	auto async = std::async(std::launch::async, uploadCrashes, "/tmp");
 #endif
 
-	mainui_loop();
+	try {
+		mainui_loop();
+	} catch (const std::exception& e) {
+		ERROR_LOG(BOOT, "mainui_loop error: %s", e.what());
+	} catch (...) {
+		ERROR_LOG(BOOT, "mainui_loop unknown exception");
+	}
 
 	emu_flycast_term();
 	os_UninstallFaultHandler();
@@ -142,6 +158,7 @@ extern "C" int SDL_main(int argc, char *argv[])
 static int emu_flycast_init()
 {
 	LogManager::Init();
+	i18n::init();
 	os_InstallFaultHandler();
 	NSArray *arguments = [[NSProcessInfo processInfo] arguments];
 	unsigned long argc = [arguments count];
@@ -178,10 +195,6 @@ static int emu_flycast_init()
 	return rc;
 }
 
-std::string os_Locale(){
-    return [[[NSLocale preferredLanguages] objectAtIndex:0] UTF8String];
-}
-
 std::string os_PrecomposedString(std::string string){
     return [[[NSString stringWithUTF8String:string.c_str()] precomposedStringWithCanonicalMapping] UTF8String];
 }
@@ -205,15 +218,13 @@ void os_RunInstance(int argc, const char *argv[])
 
 #import <Syphon/Syphon.h>
 #import <cfg/cfg.h>
-#include "rend/vulkan/vulkan.h"
 static SyphonOpenGLServer* syphonGLServer;
-static SyphonMetalServer* syphonMtlServer;
 
 void os_VideoRoutingPublishFrameTexture(GLuint texID, GLuint texTarget, float w, float h)
 {
 	if (syphonGLServer == NULL)
 	{
-		int boardID = cfgLoadInt("naomi", "BoardId", 0);
+		int boardID = config::loadInt("naomi", "BoardId");
 		syphonGLServer = [[SyphonOpenGLServer alloc] initWithName:[NSString stringWithFormat:(boardID == 0 ? @"Video Content" : @"Video Content - %d"), boardID] context:[SDL_GL_GetCurrentContext() CGLContextObj] options:nil];
 	}
 	CGLLockContext([syphonGLServer context]);
@@ -228,6 +239,11 @@ void os_VideoRoutingTermGL()
 	syphonGLServer = NULL;
 }
 
+#ifdef USE_VULKAN
+#include "rend/vulkan/vulkan.h"
+
+static SyphonMetalServer* syphonMtlServer;
+
 void os_VideoRoutingPublishFrameTexture(const vk::Device& device, const vk::Image& image, const vk::Queue& queue, float x, float y, float w, float h)
 {
 	if (syphonMtlServer == NULL)
@@ -236,7 +252,7 @@ void os_VideoRoutingPublishFrameTexture(const vk::Device& device, const vk::Imag
 		auto objectsInfo = vk::ExportMetalObjectsInfoEXT(&deviceInfo);
 		device.exportMetalObjectsEXT(&objectsInfo);
 		
-		int boardID = cfgLoadInt("naomi", "BoardId", 0);
+		int boardID = config::loadInt("naomi", "BoardId");
 		syphonMtlServer = [[SyphonMetalServer alloc] initWithName:[NSString stringWithFormat:(boardID == 0 ? @"Video Content" : @"Video Content - %d"), boardID] device:deviceInfo.mtlDevice options:nil];
 	}
 	
@@ -257,6 +273,7 @@ void os_VideoRoutingTermVk()
 	[syphonMtlServer release];
 	syphonMtlServer = NULL;
 }
+#endif
 
 namespace hostfs
 {
@@ -265,6 +282,16 @@ std::string getScreenshotsPath()
 {
 	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSPicturesDirectory, NSUserDomainMask, YES);
 	return [[paths objectAtIndex:0] UTF8String];
+}
+
+}
+
+namespace i18n
+{
+
+std::string getSystemLocale()
+{
+	return [[[NSLocale preferredLanguages] objectAtIndex:0] UTF8String];
 }
 
 }

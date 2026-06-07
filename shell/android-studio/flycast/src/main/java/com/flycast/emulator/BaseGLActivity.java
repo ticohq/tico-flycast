@@ -21,6 +21,7 @@ import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 import android.view.Window;
 import android.view.WindowManager;
+import android.window.OnBackInvokedDispatcher;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -70,14 +71,12 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
             finish();
             return;
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            // Set the navigation bar color to 0 to avoid left over when it fades out on Android 10
-            Window window = getWindow();
-            window.addFlags(FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            window.clearFlags(FLAG_TRANSLUCENT_STATUS | FLAG_TRANSLUCENT_NAVIGATION);
-            window.setNavigationBarColor(0);
-            window.getDecorView().setSystemUiVisibility(SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-        }
+        // Set the navigation bar color to 0 to avoid left over when it fades out on Android 10
+        Window window = getWindow();
+        window.addFlags(FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        window.clearFlags(FLAG_TRANSLUCENT_STATUS | FLAG_TRANSLUCENT_NAVIGATION);
+        window.setNavigationBarColor(0);
+        window.getDecorView().setSystemUiVisibility(SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             getWindow().getAttributes().layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
@@ -101,34 +100,10 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
         String result = JNIdc.initEnvironment((Emulator)getApplicationContext(), getFilesDir().getAbsolutePath(), homeDir,
                 Locale.getDefault().toString());
         if (result != null) {
-            AlertDialog.Builder dlgAlert  = new AlertDialog.Builder(this);
-            dlgAlert.setMessage("Initialization failed. Please try again and/or reinstall.\n\n"
-                    + "Error: " + result);
-            dlgAlert.setTitle("Flycast Error");
-            dlgAlert.setPositiveButton("Exit",
-                    new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialog,int id) {
-                            BaseGLActivity.this.finish();
-                        }
-                    });
-            dlgAlert.setIcon(android.R.drawable.ic_dialog_alert);
-            dlgAlert.setCancelable(false);
-            dlgAlert.create().show();
-
+            showAlertDialog(result);
             return;
         }
         Log.i("flycast", "Environment initialized");
-        if ("marble".equals(Build.DEVICE) || "marblein".equals(Build.DEVICE)
-                || "garnet".equals(Build.DEVICE) || "XIG05".equals(Build.DEVICE))
-        {
-            // Disable omp affinity for POCO F5 and Redmi Note 12 Turbo (marble, marblein)
-            // and Redmi Note 13 Pro 5G and POCO X6 5G (garnet, XIG05)
-            // because it crashes with ndk 27.1 / clang 18.x
-            // See https://github.com/android/ndk/issues/1180
-            Log.i("flycast", "Disabling OpenMP thread affinity for device " + Build.DEVICE);
-            JNIdc.disableOmpAffinity();
-        }
         Emulator app = (Emulator)getApplicationContext();
         app.getConfigurationPrefs();
         storage = new AndroidStorage(this);
@@ -163,6 +138,16 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
 
         onConfigurationChanged(getResources().getConfiguration());
 
+        // Ignore the Back button on Android 13+.
+        // This is apparently required on Android 16 since returning true from onKeyDown() is ignored.
+        /*
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, () -> {
+                // Ignore the Back button. It is handled in onKeyDown()
+            });
+        }
+        */
+
         // When viewing a resource, pass its URI to the native code for opening
         Intent intent = getIntent();
         if (Intent.ACTION_VIEW.equals(intent.getAction())) {
@@ -178,6 +163,29 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
             }
         }
         Log.i("flycast", "BaseGLActivity.onCreate done");
+    }
+
+	// Called from native code
+    private void showAlertDialog(String message)
+    {
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                AlertDialog.Builder dlgAlert = new AlertDialog.Builder(BaseGLActivity.this);
+                dlgAlert.setMessage(getResources().getString(R.string.init_failed_message) + message);
+                dlgAlert.setTitle(R.string.flycast_error);
+                dlgAlert.setPositiveButton(R.string.exit,
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int id) {
+                                BaseGLActivity.this.finish();
+                            }
+                        });
+                dlgAlert.setIcon(android.R.drawable.ic_dialog_alert);
+                dlgAlert.setCancelable(false);
+                dlgAlert.create().show();
+            }
+        });
     }
 
     private void setStorageDirectories()
@@ -267,59 +275,69 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
         return true;
     }
 
-    private boolean processJoystickInput(MotionEvent event, int axis) {
-        float v = event.getAxisValue(axis);
-        return InputDeviceManager.getInstance().axisEvent(event.getDeviceId(), axis, (int)Math.round(v * 32767.f));
+    private boolean processJoystickInput(MotionEvent event, InputDevice.MotionRange range) {
+        float v = event.getAxisValue(range.getAxis(), event.getActionIndex());
+        // normalize to [-32768, 32767]
+        v = (v - range.getMin()) / range.getRange() * 65535.f - 32768.f;
+        return InputDeviceManager.getInstance().axisEvent(event.getDeviceId(), range.getAxis(), (int)Math.round(v));
     }
     @Override
     public boolean onGenericMotionEvent(MotionEvent event) {
+        InputDeviceManager deviceManager = InputDeviceManager.getInstance();
         if ((event.getSource() & InputDevice.SOURCE_CLASS_JOYSTICK) == InputDevice.SOURCE_CLASS_JOYSTICK
                 && event.getAction() == MotionEvent.ACTION_MOVE
                 && event.getDevice() != null)
         {
             List<InputDevice.MotionRange> axes = event.getDevice().getMotionRanges();
             boolean rc = false;
+            int actionPointerIndex = event.getActionIndex();
             for (InputDevice.MotionRange range : axes)
+            {
+                if ((range.getSource() & InputDevice.SOURCE_CLASS_MASK) != InputDevice.SOURCE_CLASS_JOYSTICK)
+		            // Ignore mouse/touchpad axes (dualshock 4)
+		            continue;
                 if (range.getAxis() == MotionEvent.AXIS_HAT_X) {
-                    float v = event.getAxisValue(MotionEvent.AXIS_HAT_X);
+                    float v = event.getAxisValue(MotionEvent.AXIS_HAT_X, actionPointerIndex);
                     if (v == -1.0) {
-                        rc |= InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_LEFT, true);
-                        InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_RIGHT, false);
+                        rc |= deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_LEFT, true);
+                        deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_RIGHT, false);
                     }
                     else if (v == 1.0) {
-                        InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_LEFT, false);
-                        rc |= InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_RIGHT, true);
+                        deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_LEFT, false);
+                        rc |= deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_RIGHT, true);
                     } else {
-                        InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_LEFT, false);
-                        InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_RIGHT, false);
+                        deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_LEFT, false);
+                        deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_RIGHT, false);
                     }
                 }
                 else if (range.getAxis() == MotionEvent.AXIS_HAT_Y) {
-                    float v = event.getAxisValue(MotionEvent.AXIS_HAT_Y);
+                    float v = event.getAxisValue(MotionEvent.AXIS_HAT_Y, actionPointerIndex);
                     if (v == -1.0) {
-                        rc |= InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_UP, true);
-                        InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_DOWN, false);
+                        rc |= deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_UP, true);
+                        deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_DOWN, false);
                     }
                     else if (v == 1.0) {
-                        InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_UP, false);
-                        rc |= InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_DOWN, true);
+                        deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_UP, false);
+                        rc |= deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_DOWN, true);
                     } else {
-                        InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_UP, false);
-                        InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_DOWN, false);
+                        deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_UP, false);
+                        deviceManager.buttonEvent(event.getDeviceId(), KeyEvent.KEYCODE_DPAD_DOWN, false);
                     }
                 }
-                else
-                    rc |= processJoystickInput(event, range.getAxis());
+                else {
+                    rc |= processJoystickInput(event, range);
+                }
+            }
             if (rc)
                 return true;
         }
         else if ((event.getSource() & InputDevice.SOURCE_CLASS_POINTER) == InputDevice.SOURCE_CLASS_POINTER) {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_SCROLL:
-                    InputDeviceManager.getInstance().mouseScrollEvent(Math.round(-event.getAxisValue(MotionEvent.AXIS_VSCROLL)));
+                    deviceManager.mouseScrollEvent(Math.round(-event.getAxisValue(MotionEvent.AXIS_VSCROLL)));
                     break;
                 default:
-                    InputDeviceManager.getInstance().mouseEvent(Math.round(event.getX()), Math.round(event.getY()), event.getButtonState());
+                    deviceManager.mouseEvent(Math.round(event.getX()), Math.round(event.getY()), event.getButtonState());
                     break;
             }
             return true;
@@ -348,13 +366,14 @@ public abstract class BaseGLActivity extends Activity implements ActivityCompat.
                 }
                 return true;
             }
-            if (InputDeviceManager.getInstance().buttonEvent(event.getDeviceId(), keyCode, true))
+            InputDeviceManager deviceManager = InputDeviceManager.getInstance();
+            if (deviceManager.buttonEvent(event.getDeviceId(), keyCode, true))
                 return true;
 
             if (hasKeyboard) {
-                InputDeviceManager.getInstance().keyboardEvent(keyCode, true);
+                deviceManager.keyboardEvent(keyCode, true);
                 if (!event.isCtrlPressed() && (event.isPrintingKey() || event.getKeyCode() == KeyEvent.KEYCODE_SPACE))
-                    InputDeviceManager.getInstance().keyboardText(event.getUnicodeChar());
+                    deviceManager.keyboardText(event.getUnicodeChar());
                 return true;
             }
             if (ViewConfiguration.get(this).hasPermanentMenuKey()) {

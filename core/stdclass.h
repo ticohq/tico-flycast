@@ -13,9 +13,13 @@
 #include <cassert>
 #include <time.h>
 
-#ifdef __ANDROID__
-#include <sys/mman.h>
+#if defined(__ANDROID__)
 #undef PAGE_MASK
+#endif
+#if defined(__ANDROID__) && (HOST_CPU == CPU_ARM64 || HOST_CPU == CPU_X64)
+#undef PAGE_SIZE
+extern const unsigned long PAGE_SIZE;
+#define MAX_PAGE_SIZE 16384
 #elif defined(__APPLE__) && defined(__aarch64__)
 #define PAGE_SIZE 16384
 #elif !defined(PAGE_SIZE)
@@ -23,6 +27,9 @@
 #endif
 #ifndef PAGE_MASK
 #define PAGE_MASK (PAGE_SIZE-1)
+#endif
+#ifndef MAX_PAGE_SIZE
+#define MAX_PAGE_SIZE PAGE_SIZE
 #endif
 
 class cThread
@@ -155,6 +162,30 @@ static inline std::string trim_ws(const std::string& str,
     return str.substr(strStart, str.find_last_not_of(whitespace) + 1 - strStart);
 }
 
+static inline bool isAbsolutePath(const std::string& path)
+{
+#ifdef _WIN32
+	if (path.length() >= 3 && std::isalpha(static_cast<u8>(path[0]))
+			&& path[1] == ':' && (path[2] == '/' || path[2] == '\\'))
+		return true;
+	if (!path.empty() && (path[0] == '/' || path[0] == '\\'))
+		return true;
+	return false;
+#else
+	return !path.empty() && path[0] == '/';
+#endif
+}
+
+template<typename ... Args>
+std::string strprintf(const char *format, Args ... args)
+{
+	int size = std::snprintf(nullptr, 0, format, args...);
+	std::string out(size + 1, '\0');
+	std::snprintf(out.data(), size + 1, format, args...);
+	out.resize(size);
+	return out;
+}
+
 class MD5Sum
 {
 	MD5_CTX ctx;
@@ -203,6 +234,7 @@ public:
 
 u64 getTimeMs();
 std::string timeToISO8601(time_t time);
+std::string timeToShortDateTimeString(time_t time);
 
 class ThreadRunner
 {
@@ -210,9 +242,13 @@ public:
 	void init() {
 		threadId = std::this_thread::get_id();
 	}
+	void term() {
+		threadId = {};
+	}
 	void runOnThread(std::function<void()> func)
 	{
-		if (threadId == std::this_thread::get_id()) {
+		if (threadId == std::thread::id{}
+			|| threadId == std::this_thread::get_id()) {
 			func();
 		}
 		else {

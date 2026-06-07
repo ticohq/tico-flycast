@@ -23,7 +23,7 @@
 #include <functional>
 
 void gui_init();
-void gui_initFonts();
+void gui_updateStyle();
 void gui_open_settings();
 void gui_display_ui();
 void gui_draw_osd();
@@ -34,22 +34,24 @@ void gui_term();
 void gui_cancel_load();
 void gui_refresh_files();
 void gui_cheats();
-void gui_keyboard_input(u16 wc);
+void gui_keyboard_input(u32 wc);
 void gui_keyboard_inputUTF8(const std::string& s);
 void gui_keyboard_key(u8 keyCode, bool pressed);
 bool gui_keyboard_captured();
 bool gui_mouse_captured();
-void gui_set_mouse_position(int x, int y);
+void gui_set_mouse_position(int x, int y, bool touchscreen);
 // 0: left, 1: right, 2: middle/wheel, 3: button 4
-void gui_set_mouse_button(int button, bool pressed);
+void gui_set_mouse_button(int button, bool pressed, bool touchscreen);
 void gui_set_mouse_wheel(float delta);
 void gui_set_insets(int left, int right, int top, int bottom);
 void gui_stop_game(const std::string& message = "");
 void gui_start_game(const std::string& path);
 void gui_error(const std::string& what);
 void gui_setOnScreenKeyboardCallback(void (*callback)(bool show));
-void gui_loadState();
-void gui_saveState(bool stopRestart = true);
+void gui_loadState(bool inRam = false);
+void gui_saveState(bool stopRestart = true, bool inRam = false);
+void gui_cycleSaveStateSlot(int step);
+void gui_togglePause();
 std::string gui_getCurGameBoxartUrl();
 void gui_takeScreenshot();
 void gui_runOnUiThread(std::function<void()> function);
@@ -57,6 +59,7 @@ void gui_runOnUiThread(std::function<void()> function);
 enum class GuiState {
 	Closed,
 	Commands,
+	Pause,
 	Settings,
 	Main,
 	Onboarding,

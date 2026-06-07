@@ -35,6 +35,7 @@
 #include "hw/pvr/Renderer_if.h"
 #include "hw/arm7/arm7_rec.h"
 #include "network/ggpo.h"
+#include "network/ice.h"
 #include "hw/mem/mem_watch.h"
 #include "network/net_handshake.h"
 #include "network/naomi_network.h"
@@ -49,9 +50,11 @@
 #endif
 #include "hw/sh4/sh4_interpreter.h"
 #include "hw/sh4/dyna/ngen.h"
+
 #if defined(__SWITCH__) && defined(TICO_STANDALONE)
 #include "nswitch.h"
 #endif
+#include "oslib/i18n.h"
 
 settings_t settings;
 constexpr char const *BIOS_TITLE = "Dreamcast BIOS";
@@ -208,7 +211,9 @@ static void loadSpecialSettings()
 				// Silent Scope (JP)
 				|| prod_id == "T9513M"
 				// Pro Pinball - Trilogy (EU)
-				|| prod_id == "T30701D 50")
+				|| prod_id == "T30701D 50"
+				// Jikkyo Powerful Pro Yakyu
+				|| prod_id == "T9507M")
 		{
 			INFO_LOG(BOOT, "Enabling RTT Copy to VRAM for game %s", prod_id.c_str());
 			config::RenderToTextureBuffer.override(true);
@@ -323,7 +328,9 @@ static void loadSpecialSettings()
 			|| prod_id == "T0019M"		// KenJu Atomiswave DC Conversion
 			|| prod_id == "T0020M"		// Force Five Atomiswave DC Conversion
 			|| prod_id == "HDR-0187"	// Fushigi no Dungeon - Fuurai no Shiren Gaiden - Onna Kenshi Asuka Kenzan!
-			|| prod_id == "T15104D 50") // Slave Zero (PAL)
+			|| prod_id == "T15104D 50"	// Slave Zero (PAL)
+			|| prod_id == "MK-51152"	// World Series Baseball 2K2
+			|| ip_meta.isMILCD())
 		{
 			NOTICE_LOG(BOOT, "Forcing real BIOS");
 			config::UseReios.override(false);
@@ -351,7 +358,8 @@ static void loadSpecialSettings()
 			|| prod_id == "T7014D  50"		// Super Runabout (EU)
 			|| prod_id == "T10001D 50"		// MTV Sport - Skateboarding (PAL)
 			|| prod_id == "MK-5101050"		// Snow Surfers
-			|| prod_id == "12502D-50")		// Caesar's Palace (PAL)
+			|| prod_id == "12502D-50"		// Caesar's Palace (PAL)
+			|| prod_id == "T46605D 80")		// Evil Twin - Cyprien's Chronicles
 		{
 			NOTICE_LOG(BOOT, "Forcing PAL broadcasting");
 			config::Broadcast.override(1);
@@ -433,6 +441,12 @@ static void loadSpecialSettings()
 		if (layers != 0) {
 			NOTICE_LOG(BOOT, "Forcing %d transparent layers", layers);
 			config::PerPixelLayers.override(layers);
+		}
+		if (prod_id == "HDR-0113"			// Power Smash
+				|| prod_id == "HDR-0091")	// Pro Yakyuu Team de Asobou Net!
+		{
+			NOTICE_LOG(BOOT, "Forcing DCNet use");
+			config::UseDCNet.override(true);
 		}
 	}
 	else if (settings.platform.isArcade())
@@ -637,7 +651,7 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 			{
 				// Boot BIOS
 				if (!nvmem::loadFiles())
-					throw FlycastException("No BIOS file found in " + hostfs::getFlashSavePath("", ""));
+					throw FlycastException(strprintf(i18n::T("No BIOS file found in %s"), hostfs::getFlashSavePath("", "").c_str()));
 				gdr::initDrive("");
 			}
 			else
@@ -653,7 +667,7 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 							nvmem::loadHle();
 							NOTICE_LOG(BOOT, "Did not load BIOS, using reios");
 							if (!config::UseReios && config::UseReios.isReadOnly())
-								os_notify("This game requires a real BIOS", 15000);
+								os_notify(i18n::T("This game requires a real BIOS"), 15000);
 						}
 					}
 					else
@@ -661,7 +675,7 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 						// Content load failed. Boot the BIOS
 						settings.content.path.clear();
 						if (!nvmem::loadFiles())
-							throw FlycastException("This media cannot be loaded");
+							throw FlycastException(i18n::Ts("This media cannot be loaded"));
 						gdr::initDrive("");
 					}
 				}
@@ -705,13 +719,14 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 		cheatManager.reset(settings.content.gameId);
 		if (cheatManager.isWidescreen())
 		{
-			os_notify("Widescreen cheat activated", 2000);
+			os_notify(i18n::T("Widescreen cheat activated"), 2000);
 			config::ScreenStretching.override(134);	// 4:3 -> 16:9
 		}
 		// reload settings so that all settings can be overridden
 		loadGameSpecificSettings();
 		NetworkHandshake::init();
 		settings.input.fastForwardMode = false;
+		EventManager::event(Event::Start);
 		if (!settings.content.path.empty())
 		{
 #ifndef LIBRETRO
@@ -721,16 +736,15 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 				dc_loadstate(config::SavestateSlot);
 #endif
 		}
-		EventManager::event(Event::Start);
 
 		if (progress)
 		{
 #ifdef GDB_SERVER
-			if(config::GDBWaitForConnection)
+			if (config::GDB && config::GDBWaitForConnection)
 				progress->label = "Waiting for debugger...";
 			else
 #endif
-				progress->label = "Starting...";
+				progress->label = i18n::T("Starting...");
 		}
 
 		state = Loaded;
@@ -742,34 +756,40 @@ void Emulator::loadGame(const char *path, LoadProgress *progress)
 
 void Emulator::runInternal()
 {
-	if (singleStep)
-	{
-		getSh4Executor()->Step();
-		singleStep = false;
-	}
-	else if(stepRangeTo != 0)
-	{
-		while (Sh4cntx.pc >= stepRangeFrom && Sh4cntx.pc <= stepRangeTo)
+	runner.init();
+	try {
+		if (singleStep)
+		{
 			getSh4Executor()->Step();
+			singleStep = false;
+		}
+		else if (stepRangeTo != 0)
+		{
+			while (Sh4cntx.pc >= stepRangeFrom && Sh4cntx.pc < stepRangeTo)
+				getSh4Executor()->Step();
 
-		stepRangeFrom = 0;
-		stepRangeTo = 0;
-	}
-	else
-	{
-		do {
-			resetRequested = false;
+			stepRangeFrom = 0;
+			stepRangeTo = 0;
+		}
+		else
+		{
+			do {
+				resetRequested = false;
 
-			getSh4Executor()->Run();
+				getSh4Executor()->Run();
 
-			if (resetRequested)
-			{
-				nvmem::saveFiles();
-				dc_reset(false);
-				if (!restartCpu())
-					resetRequested = false;
-			}
-		} while (resetRequested);
+				if (resetRequested)
+				{
+					nvmem::saveFiles();
+					dc_reset(false);
+					if (!restartCpu())
+						resetRequested = false;
+				}
+			} while (resetRequested);
+		}
+	} catch (...) {
+		runner.term();
+		throw;
 	}
 }
 
@@ -790,7 +810,8 @@ void Emulator::unloadGame()
 		} catch (const FlycastException& e) {
 			ERROR_LOG(COMMON, "%s", e.what());
 		}
-
+		// Flush the VMU files to disk
+		mcfg_DestroyDevices(true);
 		config::Settings::instance().reset();
 		config::Settings::instance().load(false);
 		settings.content.path.clear();
@@ -798,6 +819,7 @@ void Emulator::unloadGame()
 		settings.content.fileName.clear();
 		settings.content.title.clear();
 		settings.platform.system = DC_PLATFORM_DREAMCAST;
+		custom_texture.terminate();
 		state = Init;
 		EventManager::event(Event::Terminate);
 	}
@@ -821,12 +843,13 @@ void Emulator::term()
 			delete recompiler;
 			recompiler = nullptr;
 		}
-		custom_texture.Terminate();	// lr: avoid deadlock on exit (win32)
+		custom_texture.terminate();	// lr: avoid deadlock on exit (win32)
 		reios_term();
 		aica::term();
 		pvr::term();
 		mem_Term();
 		libGDR_term();
+		ice::term();
 
 		state = Terminated;
 	}
@@ -887,6 +910,8 @@ void loadGameSpecificSettings()
 	{
 		reios_disk_id();
 		settings.content.gameId = trim_trailing_ws(std::string(ip_meta.product_number, sizeof(ip_meta.product_number)));
+		// in case there is a null character followed by garbage, which happens
+		settings.content.gameId = settings.content.gameId.c_str();
 
 		if (settings.content.gameId.empty())
 			return;
@@ -896,6 +921,7 @@ void loadGameSpecificSettings()
 	loadSpecialSettings();
 
 	config::Settings::instance().setGameId(settings.content.gameId);
+	custom_texture.init();
 
 	// Reload per-game settings
 	config::Settings::instance().load(true);
@@ -927,7 +953,11 @@ void Emulator::stepRange(u32 from, u32 to)
 
 void Emulator::loadstate(Deserializer& deser)
 {
-	custom_texture.Terminate();
+	if (!custom_texture.preloaded())
+	{
+		custom_texture.terminate();
+		custom_texture.init();
+	}
 #if FEAT_AREC == DYNAREC_JIT
 	aica::arm::recompiler::flush();
 #endif
@@ -988,14 +1018,14 @@ void Emulator::run()
 {
 	verify(state == Running);
 	startTime = sh4_sched_now64();
-	renderTimeout = false;
 	if (!singleStep && stepRangeTo == 0)
 		getSh4Executor()->Start();
 	try {
 		runInternal();
 		if (ggpo::active())
 			ggpo::nextFrame();
-	} catch (...) {
+	} catch (const std::exception& e) {
+		ERROR_LOG(COMMON, "Exception: %s", e.what());
 		setNetworkState(false);
 		state = Error;
 		getSh4Executor()->Stop();
@@ -1008,7 +1038,10 @@ void Emulator::start()
 {
 	if (state == Running)
 		return;
-	verify(state == Loaded);
+	if (state != Loaded) {
+		WARN_LOG(COMMON, "Unexpected emu state %d", state);
+		return;
+	}
 	state = Running;
 	SetMemoryHandlers();
 	if (config::GGPOEnable && config::ThreadedRendering)
@@ -1033,7 +1066,6 @@ void Emulator::start()
 					while (state == Running || singleStep || stepRangeTo != 0)
 					{
 						startTime = sh4_sched_now64();
-						renderTimeout = false;
 						runInternal();
 						if (!ggpo::nextFrame())
 							break;
@@ -1099,8 +1131,7 @@ bool Emulator::render()
 		if (state != Running)
 			return false;
 		run();
-		// TODO if stopping due to a user request, no frame has been rendered
-		return !renderTimeout;
+		return true;
 	}
 	if (!checkStatus())
 		return false;
@@ -1112,10 +1143,10 @@ bool Emulator::render()
 void Emulator::vblank()
 {
 	EventManager::event(Event::VBlank);
+	runner.execTasks();
 	// Time out if a frame hasn't been rendered for 50 ms
-	if (sh4_sched_now64() - startTime <= 10000000)
+	if (sh4_sched_now64() - startTime <= 50_sh4ms)
 		return;
-	renderTimeout = true;
 	if (ggpo::active())
 		ggpo::endOfFrame();
 	else if (!config::ThreadedRendering)
@@ -1151,6 +1182,7 @@ void Emulator::diskChange()
 {
 	config::Settings::instance().reset();
 	config::Settings::instance().load(false);
+	custom_texture.terminate();
 	if (!settings.content.path.empty())
 	{
 		hostfs::FileInfo info = hostfs::storage().getFileInfo(settings.content.path);
@@ -1166,7 +1198,6 @@ void Emulator::diskChange()
 	cheatManager.reset(settings.content.gameId);
 	if (cheatManager.isWidescreen())
 		config::ScreenStretching.override(134);	// 4:3 -> 16:9
-	custom_texture.Terminate();
 	EventManager::event(Event::DiskChange);
 }
 

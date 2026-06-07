@@ -3,9 +3,12 @@
 #include "maple_if.h"
 #include "hw/naomi/naomi_cart.h"
 #include "hw/naomi/card_reader.h"
+#include "hw/sh4/modules/modules.h"
 #include "cfg/option.h"
 #include "stdclass.h"
 #include "serialize.h"
+#include "input/maplelink.h"
+#include "input/mouse.h"
 
 MapleInputState mapleInputState[4];
 extern bool maple_ddt_pending_reset;
@@ -213,7 +216,16 @@ bool maple_atomiswave_coin_chute(int slot)
 
 static void mcfg_Create(MapleDeviceType type, u32 bus, u32 port, s32 player_num = -1)
 {
-	MapleDevices[bus][port].reset();
+	if (MapleDevices[bus][port] != nullptr)
+		return;
+	if (type == MDT_SegaVMU)
+	{
+		MapleLink::Ptr link = MapleLink::GetMapleLink(bus, port);
+		if (link != nullptr && link->storageEnabled()) {
+			createMapleLinkVmu(bus, port);
+			return;
+		}
+	}
 	std::shared_ptr<maple_device> dev = maple_Create(type);
 	dev->Setup(bus, port, player_num);
 }
@@ -243,7 +255,12 @@ static void createNaomiDevices()
 			insertRfidCard(1);
 		}
 	}
-	else
+	else if (gameId == "THE KING OF ROUTE66")
+	{
+		mcfg_Create(MDT_SegaController, 1, 5);
+		mcfg_Create(MDT_Microphone, 1, 0);
+	}
+	else if (settings.platform.isNaomi1())
 	{
 		// Connect VMU B1
 		mcfg_Create(MDT_SegaController, 1, 5);
@@ -309,6 +326,55 @@ static void createAtomiswaveDevices()
 	}
 }
 
+// Touch screen of Fish Life series
+class HKS0100TouchScreen : public SCIFSerialPort::Pipe
+{
+	bool button;
+	int x;
+	int y;
+	std::deque<u8> buffer;
+
+	void update()
+	{
+		if (((mo_buttons[0] & 4) == 0) != button || mo_x_abs[0] != x || mo_y_abs[0] != y)
+		{
+			button = (mo_buttons[0] & 4) == 0;
+			x = mo_x_abs[0];
+			y = mo_y_abs[0];
+			buffer.push_back(0x40 | button);
+			buffer.push_back((x * 3000 / 640) & 0x3f);
+			buffer.push_back(((x * 3000 / 640) >> 6) & 0x3f);
+			buffer.push_back((y * 2294 / 480) & 0x3f);
+			buffer.push_back(((y * 2294 / 480) >> 6) & 0x3f);
+			buffer.push_back(0);
+			buffer.push_back(0);
+		}
+	}
+
+public:
+	void reset()
+	{
+		button = false;
+		x = 0;
+		y = 0;
+		buffer.clear();
+	}
+
+	int available() override {
+		update();
+		return buffer.size();
+	}
+
+	u8 read() override
+	{
+		if (buffer.empty())
+			return 0;
+		u8 b = buffer.front();
+		buffer.pop_front();
+		return b;
+	}
+};
+
 static void createDreamcastDevices()
 {
 	for (int bus = 0; bus < MAPLE_PORTS; ++bus)
@@ -331,6 +397,7 @@ static void createDreamcastDevices()
 		case MDT_PopnMusicController:
 		case MDT_DenshaDeGoController:
 		case MDT_Dreameye:
+		case MDT_DreamParaParaController:
 			mcfg_Create(config::MapleMainDevices[bus], bus, 5);
 			if (config::MapleMainDevices[bus] == MDT_FishingController)
 				// integrated vibration pack
@@ -352,6 +419,15 @@ static void createDreamcastDevices()
 		default:
 			WARN_LOG(MAPLE, "Invalid device type %d for port %d", (MapleDeviceType)config::MapleMainDevices[bus], bus);
 			break;
+		}
+	}
+	if (settings.content.gameId == "HDR-0094")
+	{
+		// Fish Life
+		static HKS0100TouchScreen hks0100TouchScreen;
+		if (SCIFSerialPort::Instance().getPipe() != &hks0100TouchScreen) {
+			hks0100TouchScreen.reset();
+			SCIFSerialPort::Instance().setPipe(&hks0100TouchScreen);
 		}
 	}
 }
@@ -447,7 +523,7 @@ void mcfg_DeserializeDevices(Deserializer& deser)
 {
 	if (!deser.rollback())
 		mcfg_DestroyDevices(false);
-	u8 eeprom[sizeof(maple_naomi_jamma::eeprom)];
+	u8 eeprom[128];
 	if (deser.version() < Deserializer::V23)
 	{
 		deser >> eeprom;
@@ -489,9 +565,9 @@ void mcfg_DeserializeDevices(Deserializer& deser)
 		memcpy(EEPROM, eeprom, sizeof(eeprom));
 }
 
-std::shared_ptr<maple_naomi_jamma> getMieDevice()
+std::shared_ptr<MIE> getMieDevice()
 {
 	if (MapleDevices[0][5] == nullptr || MapleDevices[0][5]->get_device_type() != MDT_NaomiJamma)
 		return nullptr;
-	return std::static_pointer_cast<maple_naomi_jamma>(MapleDevices[0][5]);
+	return std::static_pointer_cast<MIE>(MapleDevices[0][5]);
 }

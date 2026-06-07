@@ -8,10 +8,10 @@
 #include "rend/gles/postprocess.h"
 #include "vmu_xhair.h"
 #endif
-#include "rend/transform_matrix.h"
 #include "wsi/gl_context.h"
 #include "emulator.h"
 #include "naomi2.h"
+#include "oslib/i18n.h"
 
 #ifdef TEST_AUTOMATION
 #include "cfg/cfg.h"
@@ -147,7 +147,7 @@ uniform lowp vec2 texSize;
 #endif
 #endif
 #if DITHERING == 1
-uniform lowp vec4 ditherColorMax;
+uniform lowp vec4 ditherDivisor;
 #endif
 
 /* Vertex input*/
@@ -360,16 +360,14 @@ void main()
 
 #if DITHERING == 1
 	mediump float ditherTable[16] = float[](
-		 0.9375,  0.1875,  0.75,  0.,   
-		 0.4375,  0.6875,  0.25,  0.5,
-		 0.8125,  0.0625,  0.875, 0.125,
-		 0.3125,  0.5625,  0.375, 0.625	
+		5., 13.,  7., 15.,
+		9.,  1., 11.,  3.,
+		6., 14.,  4., 12.,
+		10., 2.,  8.,  0.
 	);
 	mediump float r = ditherTable[int(mod(gl_FragCoord.y, 4.)) * 4 + int(mod(gl_FragCoord.x, 4.))];
-	// 31 for 5-bit color, 63 for 6 bits, 15 for 4 bits
-	color += r / ditherColorMax;
-	// avoid rounding
-	color = floor(color * 255.) / 255.;
+	mediump vec4 dv = vec4(r, r, r, 1.) / ditherDivisor;
+	color = clamp(floor(color * 255. + dv) / 255., 0., 1.);
 #endif
 #endif
 	gl_FragColor = color;
@@ -404,12 +402,10 @@ gl_ctx gl;
 GLuint fogTextureId;
 GLuint paletteTextureId;
 
-glm::mat4 ViewportMatrix;
-
 #ifdef TEST_AUTOMATION
 void do_swap_automation()
 {
-	static FILE* video_file = fopen(cfgLoadStr("record", "rawvid","").c_str(), "wb");
+	static FILE* video_file = fopen(config::loadStr("record", "rawvid").c_str(), "wb");
 	extern bool do_screenshot;
 
 	GlFramebuffer *framebuffer = gl.ofbo2.ready ? gl.ofbo2.framebuffer.get() : gl.ofbo.framebuffer.get();
@@ -497,6 +493,11 @@ static void gles_term()
 	termGLCommon();
 
 	gl_delete_shaders();
+	// Restore the gl context to a decent state in case of exception
+	if (gl.ofbo.origFbo != 0)
+		glBindFramebuffer(GL_FRAMEBUFFER, gl.ofbo.origFbo);
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	glActiveTexture(GL_TEXTURE0);
 }
 
 bool testBlitFramebuffer();
@@ -601,6 +602,7 @@ void findGLVersion()
 	const char *renderer = (const char *)glGetString(GL_RENDERER);
 	gl.mesa_nouveau = !stricmp(vendor, "nouveau")
 			|| (!stricmp(vendor, "Mesa") && !strncmp(renderer, "NV", 2));
+	gl.mali = !stricmp(vendor, "arm");
 	NOTICE_LOG(RENDERER, "OpenGL%s version %d.%d", gl.is_gles ? " ES" : "", gl.gl_major, gl.gl_minor);
 	NOTICE_LOG(RENDERER, "Vendor '%s' Renderer '%s' Version '%s'", vendor, renderer, glGetString(GL_VERSION));
 	while (glGetError() != GL_NO_ERROR)
@@ -695,7 +697,8 @@ GLuint gl_CompileAndLink(const char *vertexShader, const char *fragmentShader)
 		// Dump the shaders source for troubleshooting
 		INFO_LOG(RENDERER, "// VERTEX SHADER\n%s\n// END", vertexShader);
 		INFO_LOG(RENDERER, "// FRAGMENT SHADER\n%s\n// END", fragmentShader);
-		die("shader compile fail\n");
+		throw RendererException(i18n::T("OpenGL shader compilation failed"));
+		// FIXME MINIDUMP-8A1, MINIDUMP-8A2, MINIDUMP-7YE
 	}
 	glDetachShader(program, vs);
 	glDetachShader(program, ps);
@@ -857,7 +860,7 @@ bool CompilePipelineShader(PipelineShader* s)
 		s->fog_clamp_max = -1;
 	}
 	s->ndcMat = glGetUniformLocation(s->program, "ndcMat");
-	s->ditherColorMax = glGetUniformLocation(s->program, "ditherColorMax");
+	s->ditherDivisor = glGetUniformLocation(s->program, "ditherDivisor");
 	s->texSize = glGetUniformLocation(s->program, "texSize");
 
 	if (s->naomi2)
@@ -1009,12 +1012,12 @@ static void updateFogTexture(u8 *fog_table, GLenum texture_slot, GLint fog_image
 	u8 temp_tex_buffer[256];
 	MakeFogTexture(temp_tex_buffer);
 
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    GLint internalformat;
-    if (gl.is_gles && fog_image_format == GL_RED)
-    	internalformat = GL_R8;
-    else
-    	internalformat = fog_image_format;
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	GLint internalformat;
+	if (gl.is_gles && fog_image_format == GL_RED)
+		internalformat = GL_R8;
+	else
+		internalformat = fog_image_format;
 	glTexImage2D(GL_TEXTURE_2D, 0, internalformat, 128, 2, 0, fog_image_format, GL_UNSIGNED_BYTE, temp_tex_buffer);
 	glCheck();
 
@@ -1055,8 +1058,8 @@ void OpenGLRenderer::drawOSD()
 void OpenGLRenderer::Process(TA_context* ctx)
 {
 	if (gl.gl_major < 3 && settings.platform.isNaomi2())
-		throw FlycastException("OpenGL ES 3.0+ required for Naomi 2");
-
+		throw RendererException(i18n::T("OpenGL ES 3.0+ required for Naomi 2"));
+	gl.rendContext = &ctx->rend;
 	if (resetTextureCache) {
 		TexCache.Clear();
 		resetTextureCache = false;
@@ -1071,6 +1074,8 @@ void OpenGLRenderer::Process(TA_context* ctx)
 		updatePaletteTexture(getPaletteTextureSlot());
 		updatePalette = false;
 	}
+	if (!ctx->rend.isRTT && ctx->rend.swapInterval > 0)
+		theGLContext.setSwapInterval(ctx->rend.swapInterval);
 	ta_parse(ctx, gl.prim_restart_fixed_supported || gl.prim_restart_supported);
 }
 
@@ -1080,13 +1085,13 @@ static void upload_vertex_indices()
 	{
 		static std::vector<u16> short_idx;
 		short_idx.clear();
-		short_idx.reserve(pvrrc.idx.size());
-		for (u32 i : pvrrc.idx)
+		short_idx.reserve(gl.rendContext->idx.size());
+		for (u32 i : gl.rendContext->idx)
 			short_idx.push_back(i);
 		gl.vbo.idxs->update(short_idx.data(), short_idx.size() * sizeof(u16));
 	}
 	else
-		gl.vbo.idxs->update(pvrrc.idx.data(), pvrrc.idx.size() * sizeof(decltype(*pvrrc.idx.data())));
+		gl.vbo.idxs->update(gl.rendContext->idx.data(), gl.rendContext->idx.size() * sizeof(decltype(*gl.rendContext->idx.data())));
 	glCheck();
 }
 
@@ -1095,9 +1100,9 @@ bool OpenGLRenderer::renderFrame(int width, int height)
 	if (!config::EmulateFramebuffer)
 		initVideoRoutingFrameBuffer();
 	
-	bool is_rtt = pvrrc.isRTT;
+	bool is_rtt = gl.rendContext->isRTT;
 
-	float vtx_max_fZ = pvrrc.fZ_max;
+	float vtx_max_fZ = gl.rendContext->fZ_max;
 
 	//sanitise the values, now with NaN detection (for omap)
 	//0x49800000 is 1024*1024. Using integer math to avoid issues w/ infs and nans
@@ -1107,11 +1112,8 @@ bool OpenGLRenderer::renderFrame(int width, int height)
 	//add some extra range to avoid clipping border cases
 	vtx_max_fZ *= 1.001f;
 
-	TransformMatrix<COORD_OPENGL> matrices(pvrrc, is_rtt ? pvrrc.getFramebufferWidth() : width,
-			is_rtt ? pvrrc.getFramebufferHeight() : height);
-	ShaderUniforms.ndcMat = matrices.GetNormalMatrix();
-	const glm::mat4& scissor_mat = matrices.GetScissorMatrix();
-	ViewportMatrix = matrices.GetViewportMatrix();
+	gl.matrices.CalcMatrices(gl.rendContext, width, height);
+	ShaderUniforms.ndcMat = gl.matrices.GetNormalMatrix();
 
 	ShaderUniforms.depth_coefs[0] = 2.f / vtx_max_fZ;
 	ShaderUniforms.depth_coefs[1] = -1.f;
@@ -1125,8 +1127,8 @@ bool OpenGLRenderer::renderFrame(int width, int height)
 	//Fog density constant
 	ShaderUniforms.fog_den_float = FOG_DENSITY.get() * config::ExtraDepthScale;
 
-	pvrrc.fog_clamp_min.getRGBAColor(ShaderUniforms.fog_clamp_min);
-	pvrrc.fog_clamp_max.getRGBAColor(ShaderUniforms.fog_clamp_max);
+	gl.rendContext->fog_clamp_min.getRGBAColor(ShaderUniforms.fog_clamp_min);
+	gl.rendContext->fog_clamp_max.getRGBAColor(ShaderUniforms.fog_clamp_max);
 	
 	if (config::ModifierVolumes)
 	{
@@ -1146,28 +1148,26 @@ bool OpenGLRenderer::renderFrame(int width, int height)
 
 	ShaderUniforms.PT_ALPHA=(PT_ALPHA_REF&0xFF)/255.0f;
 
-	if (config::EmulateFramebuffer && pvrrc.fb_W_CTRL.fb_dither && pvrrc.fb_W_CTRL.fb_packmode <= 3)
+	if (config::EmulateFramebuffer && gl.rendContext->fb_W_CTRL.fb_dither && gl.rendContext->fb_W_CTRL.fb_packmode <= 3)
 	{
 		ShaderUniforms.dithering = true;
-		switch (pvrrc.fb_W_CTRL.fb_packmode)
+		switch (gl.rendContext->fb_W_CTRL.fb_packmode)
 		{
 		case 0: // 0555 KRGB 16 bit
 		case 3: // 1555 ARGB 16 bit
-			ShaderUniforms.ditherColorMax[0] = ShaderUniforms.ditherColorMax[1] = ShaderUniforms.ditherColorMax[2] = 31.f;
-			ShaderUniforms.ditherColorMax[3] = 255.f;
+			ShaderUniforms.ditherDivisor[0] = ShaderUniforms.ditherDivisor[1] = ShaderUniforms.ditherDivisor[2] = 2.f;
 			break;
 		case 1: // 565 RGB 16 bit
-			ShaderUniforms.ditherColorMax[0] = ShaderUniforms.ditherColorMax[2] = 31.f;
-			ShaderUniforms.ditherColorMax[1] = 63.f;
-			ShaderUniforms.ditherColorMax[3] = 255.f;
+			ShaderUniforms.ditherDivisor[0] = ShaderUniforms.ditherDivisor[2] = 2.f;
+			ShaderUniforms.ditherDivisor[1] = 4.f;
 			break;
 		case 2: // 4444 ARGB 16 bit
-			ShaderUniforms.ditherColorMax[0] = ShaderUniforms.ditherColorMax[1]
-				= ShaderUniforms.ditherColorMax[2] = ShaderUniforms.ditherColorMax[3] = 15.f;
+			ShaderUniforms.ditherDivisor[0] = ShaderUniforms.ditherDivisor[1] = ShaderUniforms.ditherDivisor[2] = 1.f;
 			break;
 		default:
 			break;
 		}
+		ShaderUniforms.ditherDivisor[3] = 1.f;
 	}
 	else
 	{
@@ -1218,9 +1218,6 @@ bool OpenGLRenderer::renderFrame(int width, int height)
 #endif
 	}
 
-	bool wide_screen_on = !is_rtt && config::Widescreen && !matrices.IsClipped()
-			&& !config::Rotate90 && !config::EmulateFramebuffer;
-
 	//Color is cleared by the background plane
 
 	glcache.Disable(GL_SCISSOR_TEST);
@@ -1235,83 +1232,41 @@ bool OpenGLRenderer::renderFrame(int width, int height)
 	else
 		glcache.ClearColor(0.f, 0.f, 0.f, 0.f);
 
-	if (is_rtt || pvrrc.clearFramebuffer)
+	if (is_rtt || gl.rendContext->clearFramebuffer)
 		glClear(GL_COLOR_BUFFER_BIT);
 	//move vertex to gpu
 	//Main VBO
-	gl.vbo.geometry->update(&pvrrc.verts[0], pvrrc.verts.size() * sizeof(decltype(pvrrc.verts[0])));
+	gl.vbo.geometry->update(&gl.rendContext->verts[0], gl.rendContext->verts.size() * sizeof(decltype(gl.rendContext->verts[0])));
 
 	upload_vertex_indices();
 
 	//Modvol VBO
-	if (!pvrrc.modtrig.empty())
-		gl.vbo.modvols->update(&pvrrc.modtrig[0], pvrrc.modtrig.size() * sizeof(decltype(pvrrc.modtrig[0])));
+	if (!gl.rendContext->modtrig.empty())
+		gl.vbo.modvols->update(&gl.rendContext->modtrig[0], gl.rendContext->modtrig.size() * sizeof(decltype(gl.rendContext->modtrig[0])));
 
-	if (!wide_screen_on)
-	{
-		float fWidth;
-		float fHeight;
-		float min_x;
-		float min_y;
-		if (!is_rtt)
-		{
-			glm::vec4 clip_min(pvrrc.fb_X_CLIP.min, pvrrc.fb_Y_CLIP.min, 0, 1);
-			glm::vec4 clip_dim(pvrrc.fb_X_CLIP.max - pvrrc.fb_X_CLIP.min + 1,
-							   pvrrc.fb_Y_CLIP.max - pvrrc.fb_Y_CLIP.min + 1, 0, 0);
-			clip_min = scissor_mat * clip_min;
-			clip_dim = scissor_mat * clip_dim;
-
-			min_x = clip_min[0];
-			min_y = clip_min[1];
-			fWidth = clip_dim[0];
-			fHeight = clip_dim[1];
-			if (fWidth < 0)
-			{
-				min_x += fWidth;
-				fWidth = -fWidth;
-			}
-			if (fHeight < 0)
-			{
-				min_y += fHeight;
-				fHeight = -fHeight;
-			}
-			if (matrices.GetSidebarWidth() > 0)
-			{
-				float scaled_offs_x = matrices.GetSidebarWidth();
-
-				glcache.Enable(GL_SCISSOR_TEST);
-				glcache.Scissor(0, 0, (GLsizei)lroundf(scaled_offs_x), (GLsizei)height);
-				glClear(GL_COLOR_BUFFER_BIT);
-				glcache.Scissor(width - scaled_offs_x, 0, (GLsizei)lroundf(scaled_offs_x + 1.f), (GLsizei)height);
-				glClear(GL_COLOR_BUFFER_BIT);
-			}
-		}
-		else
-		{
-			min_x = (float)pvrrc.getFramebufferMinX();
-			min_y = (float)pvrrc.getFramebufferMinY();
-			fWidth = (float)pvrrc.getFramebufferWidth() - min_x;
-			fHeight = (float)pvrrc.getFramebufferHeight() - min_y;
-			if (config::RenderResolution > 480 && !config::RenderToTextureBuffer)
-			{
-				float scale = config::RenderResolution / 480.f;
-				min_x *= scale;
-				min_y *= scale;
-				fWidth *= scale;
-				fHeight *= scale;
-			}
-		}
+	Rect scissor = gl.matrices.getBaseScissor();
+	ShaderUniforms.base_clipping.x = scissor.origin.x;
+	ShaderUniforms.base_clipping.y = scissor.origin.y;
+	ShaderUniforms.base_clipping.width = scissor.size.x;
+	ShaderUniforms.base_clipping.height = scissor.size.y;
+	if (is_rtt) {
+		// Render to texture
 		ShaderUniforms.base_clipping.enabled = true;
-		ShaderUniforms.base_clipping.x = (int)lroundf(min_x);
-		ShaderUniforms.base_clipping.y = (int)lroundf(min_y);
-		ShaderUniforms.base_clipping.width = (int)lroundf(fWidth);
-		ShaderUniforms.base_clipping.height = (int)lroundf(fHeight);
-		glcache.Scissor(ShaderUniforms.base_clipping.x, ShaderUniforms.base_clipping.y, ShaderUniforms.base_clipping.width, ShaderUniforms.base_clipping.height);
-		glcache.Enable(GL_SCISSOR_TEST);
 	}
 	else
 	{
-		ShaderUniforms.base_clipping.enabled = false;
+		// Render to screen
+		if (scissor.origin.x != 0 || scissor.origin.y != 0
+				|| scissor.size.x < (int)gl.rendContext->framebufferWidth
+				|| scissor.size.y < (int)gl.rendContext->framebufferHeight)
+			ShaderUniforms.base_clipping.enabled = true;
+		else
+			ShaderUniforms.base_clipping.enabled = false;
+	}
+	if (ShaderUniforms.base_clipping.enabled) {
+		glcache.Scissor(ShaderUniforms.base_clipping.x, ShaderUniforms.base_clipping.y,
+				ShaderUniforms.base_clipping.width, ShaderUniforms.base_clipping.height);
+		glcache.Enable(GL_SCISSOR_TEST);
 	}
 
 	DrawStrips();
@@ -1361,8 +1316,8 @@ void OpenGLRenderer::Term()
 bool OpenGLRenderer::Render()
 {
 	saveCurrentFramebuffer();
-	renderFrame(pvrrc.framebufferWidth, pvrrc.framebufferHeight);
-	if (pvrrc.isRTT) {
+	renderFrame(gl.rendContext->framebufferWidth, gl.rendContext->framebufferHeight);
+	if (gl.rendContext->isRTT) {
 		restoreCurrentFramebuffer();
 		return false;
 	}

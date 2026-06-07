@@ -47,6 +47,21 @@
 [submodule "rcheevos"]
 	path = rcheevos
 	url = https://github.com/RetroAchievements/rcheevos.git
-[submodule "deps/rcheevos"]
-	path = deps/rcheevos
-	url = https://github.com/RetroAchievements/rcheevos.git
+[submodule "core/deps/xbyak"]
+	path = core/deps/xbyak
+	url = https://github.com/herumi/xbyak.git
+[submodule "core/deps/libjuice"]
+	path = core/deps/libjuice
+	url = https://github.com/paullouisageneau/libjuice.git
+[submodule "core/deps/websocketpp"]
+	path = core/deps/websocketpp
+	url = https://github.com/zaphoyd/websocketpp.git
+[submodule "core/deps/DreamPicoPort-API"]
+	path = core/deps/DreamPicoPort-API
+	url = https://github.com/OrangeFox86/DreamPicoPort-API.git
+[submodule "core/deps/tinygettext"]
+	path = core/deps/tinygettext
+	url = https://github.com/flyinghead/tinygettext
+[submodule "core/deps/freetype"]
+	path = core/deps/freetype
+	url = https://gitlab.freedesktop.org/freetype/freetype.git

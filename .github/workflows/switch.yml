@@ -1,6 +1,10 @@
-name: Nintendo Switch CI
+name: Nintendo Switch
 
-on: [push, pull_request]
+on:
+  push:
+    branches-ignore:
+      - 'l10n_**'
+  pull_request:
 
 jobs:
   build:
@@ -18,17 +22,17 @@ jobs:
       - name: Set up build environment
         run: |
           sudo apt-get update
-          sudo apt-get -y install ccache
+          sudo apt-get -y install ccache cmake
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          submodules: true
+          submodules: recursive
 
       - name: Mark git repository as safe
         run: git config --global --add safe.directory $PWD
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.ccache
           key: ccache-switch-${{ matrix.config.name }}-${{ github.sha }}
@@ -39,10 +43,12 @@ jobs:
           $DEVKITPRO/portlibs/switch/bin/aarch64-none-elf-cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=artifact -G Ninja ${{ matrix.config.cmakeArgs }}
           cmake --build build --config Release --target install
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: flycast-switch-${{ matrix.config.name }}
-          path: artifact/bin
+          path: |
+            artifact/bin
+            artifact/lib/libretro
 
       - name: Package app
         run: zip -m artifact/bin/flycast.nro.zip artifact/bin/flycast.nro

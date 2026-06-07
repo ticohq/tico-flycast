@@ -4,6 +4,7 @@
 #include "stdclass.h"
 #include "hw/sh4/sh4_sched.h"
 #include "serialize.h"
+#include "oslib/i18n.h"
 
 Disc* chd_parse(const char* file, std::vector<u8> *digest);
 Disc* gdi_parse(const char* file, std::vector<u8> *digest);
@@ -93,7 +94,7 @@ Disc* OpenDisc(const std::string& path, std::vector<u8> *digest)
 			return disc;
 	}
 
-	throw FlycastException("Unknown disk format");
+	throw FlycastException(i18n::Ts("Unknown disk format"));
 }
 
 namespace gdr {
@@ -235,6 +236,8 @@ void libGDR_GetToc(u32* to, DiskArea area)
 	else if (disc->type == GdRom)
 		last_track = 2;
 
+	if (first_track - 1 >= disc->tracks.size() || last_track - 1 >= disc->tracks.size())
+		return;
 	//Generate the TOC info
 
 	//-1 for 1..99 0 ..98
@@ -295,11 +298,11 @@ u32 Disc::ReadSectors(u32 FAD, u32 count, u8* dst, u32 fmt, bool stopOnMiss, Loa
 			progress->label = "Loading...";
 			progress->progress = (float)i / count;
 		}
+		if (FAD >= LeadOut.StartFAD && stopOnMiss)
+			return i;
 		if (!readSector(FAD, temp, &secfmt, q_subchannel, &subfmt))
 		{
 			WARN_LOG(GDROM, "Sector Read miss FAD: %d", FAD);
-			if (stopOnMiss)
-				return i;
 			memset(temp, 0, sizeof(temp));
 			secfmt = SECFMT_2352;
 		}
@@ -366,7 +369,7 @@ namespace gdr
 void insertDisk(const std::string& path)
 {
 	if (!doDiscSwap(path))
-		throw FlycastException("This media cannot be loaded");
+		throw FlycastException(i18n::Ts("This media cannot be loaded"));
 	settings.content.path = path;
 	// Drive is busy after the lid was closed
 	sns_asc = 4;

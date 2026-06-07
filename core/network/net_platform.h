@@ -53,7 +53,7 @@ typedef int sock_t;
 #define L_EWOULDBLOCK EWOULDBLOCK
 #define L_EAGAIN EAGAIN
 #define L_EINPROGRESS EINPROGRESS
-#define get_last_error() (errno)
+static inline int get_last_error() { return errno; }
 #define INVALID_SOCKET (-1)
 #define perror(s) do { ERROR_LOG(NETWORK, "%s: %s", (s) != NULL ? (s) : "", strerror(get_last_error())); } while (false)
 #else
@@ -62,7 +62,7 @@ typedef SOCKET sock_t;
 #define L_EWOULDBLOCK WSAEWOULDBLOCK
 #define L_EAGAIN WSAEWOULDBLOCK
 #define L_EINPROGRESS WSAEINPROGRESS
-#define get_last_error() (WSAGetLastError())
+static inline int get_last_error() { return WSAGetLastError(); }
 #define perror(s) do { ERROR_LOG(NETWORK, "%s: Winsock error: %d", (s) != NULL ? (s) : "", WSAGetLastError()); } while (false)
 #ifndef SHUT_WR
 #define SHUT_WR SD_SEND
@@ -91,7 +91,7 @@ static inline void set_tcp_nodelay(sock_t fd)
 #if defined(_WIN32)
 	struct protoent *tcp_proto = getprotobyname("TCP");
 	setsockopt(fd, tcp_proto->p_proto, TCP_NODELAY, (const char *)&optval, optlen);
-#elif !defined(__APPLE__) && !defined(__FreeBSD__) && !defined(__NetBSD__) && !defined(__OpenBSD__)
+#elif !defined(__APPLE__) && !defined(__DragonFly__) && !defined(__FreeBSD__) && !defined(__NetBSD__) && !defined(__OpenBSD__) && !defined(__HAIKU__)
 	setsockopt(fd, SOL_TCP, TCP_NODELAY, (const void *)&optval, optlen);
 #else
 	struct protoent *tcp_proto = getprotobyname("TCP");
@@ -145,4 +145,34 @@ static inline const char *inet_ntop(int af, const void* src, char* dst, int cnt)
 void enableNetworkBroadcast(bool enable);
 #else
 static inline void enableNetworkBroadcast(bool enable) {}
+#endif
+
+#ifdef __ANDROID__
+#include <ifaddrs.h>
+
+extern "C" {
+
+int android_getifaddrs(struct ifaddrs **ifap);
+void android_freeifaddrs(struct ifaddrs *ifa);
+
+static inline int my_getifaddrs(struct ifaddrs **ifap)
+{
+	if (__builtin_available(android 24, *))
+		return ::getifaddrs(ifap);
+	else
+		return ::android_getifaddrs(ifap);
+}
+
+static inline void my_freeifaddrs(struct ifaddrs *ifa)
+{
+	if (__builtin_available(android 24, *))
+		::freeifaddrs(ifa);
+	else
+		::android_freeifaddrs(ifa);
+}
+
+}
+
+#define getifaddrs my_getifaddrs
+#define freeifaddrs my_freeifaddrs
 #endif

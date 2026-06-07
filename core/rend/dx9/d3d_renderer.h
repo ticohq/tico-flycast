@@ -20,13 +20,13 @@
 #include "types.h"
 #include <array>
 #include "hw/pvr/Renderer_if.h"
+#include "hw/pvr/ta_ctx.h"
 #include <d3d9.h>
 #include "dxcontext.h"
 #include "rend/transform_matrix.h"
 #include "d3d_texture.h"
 #include "d3d_shaders.h"
 #include "ui/imgui_driver.h"
-#include "rend/tileclip.h"
 
 class RenderStateCache
 {
@@ -112,7 +112,7 @@ struct D3DRenderer : public Renderer
 		frameRendered = false;
 		return true;
 	}
-	BaseTextureCacheData *GetTexture(TSP tsp, TCW tcw) override;
+	BaseTextureCacheData *GetTexture(TSP tsp, TCW tcw, int area) override;
 	void preReset();
 	void postReset();
 	void RenderFramebuffer(const FramebufferInfo& info) override;
@@ -141,7 +141,7 @@ private:
 	void readRttRenderTarget(u32 texAddress);
 	void writeFramebufferToVRAM();
 	void drawOSD();
-	TileClipping setTileClip(u32 tileclip, int rect[4]);
+	TileClipping setTileClip(u32 tileclip, Rect& rect);
 
 	RenderStateCache devCache;
 	ComPtr<IDirect3DDevice9> device;
@@ -169,7 +169,7 @@ private:
 
 	u32 width = 0;
 	u32 height = 0;
-	TransformMatrix<COORD_DIRECTX> matrices;
+	TransformMatrix matrices{ true };
 	D3DTextureCache texCache;
 	D3DShaders shaders;
 	RECT scissorRect{};
@@ -179,5 +179,6 @@ private:
 	int maxAnisotropy = 1;
 	float aspectRatio = 4.f / 3.f;
 	bool dithering = false;
+	rend_context *rendContext;
 };
 

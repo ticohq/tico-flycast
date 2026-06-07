@@ -21,14 +21,15 @@
 #include "cfg/cfg.h"
 #include "oslib/oslib.h"
 #include "stdclass.h"
-
-constexpr size_t MAX_MSGLEN = 1024;
+#include "nowide/stackstring.hpp"
 
 template <typename T>
 void OpenFStream(T& fstream, const std::string& filename, std::ios_base::openmode openmode)
 {
 #ifdef _WIN32
-	fstream.open(UTF8ToTStr(filename).c_str(), openmode);
+	nowide::wstackstring wname;
+	if (wname.convert(filename.c_str()))
+		fstream.open(wname.get(), openmode);
 #else
 	fstream.open(filename.c_str(), openmode);
 #endif
@@ -120,7 +121,7 @@ LogManager::LogManager()
 	m_log[LogTypes::SH4] = {"SH4", "SH4 Modules"};
 
 	// Set up log listeners
-	int verbosity = cfgLoadInt("log", "Verbosity", LogTypes::LDEBUG);
+	int verbosity = config::loadInt("log", "Verbosity", LogTypes::LDEBUG);
 
 	// Ensure the verbosity level is valid
 	if (verbosity < 1)
@@ -130,12 +131,12 @@ LogManager::LogManager()
 	SetLogLevel(static_cast<LogTypes::LOG_LEVELS>(verbosity));
 
 	RegisterListener(LogListener::CONSOLE_LISTENER, new ConsoleListener());
-	EnableListener(LogListener::CONSOLE_LISTENER, cfgLoadBool("log", "LogToConsole", true));
+	EnableListener(LogListener::CONSOLE_LISTENER, config::loadBool("log", "LogToConsole", true));
 	RegisterListener(LogListener::IN_MEMORY_LISTENER, new InMemoryListener());
 	EnableListener(LogListener::IN_MEMORY_LISTENER, true);
 
 	for (LogContainer& container : m_log)
-		container.m_enable = cfgLoadBool("log", container.m_short_name, true);
+		container.m_enable = config::loadBool("log", container.m_short_name, true);
 
 	m_path_cutoff_point = DeterminePathCutOffPoint();
 
@@ -144,7 +145,7 @@ LogManager::LogManager()
 
 void LogManager::UpdateConfig()
 {
-	bool logToFile = cfgLoadBool("log", "LogToFile", false);
+	bool logToFile = config::loadBool("log", "LogToFile", false);
 	if (logToFile != IsListenerEnabled(LogListener::FILE_LISTENER))
 	{
 		if (!logToFile) {
@@ -170,26 +171,13 @@ void LogManager::UpdateConfig()
 		}
 		EnableListener(LogListener::FILE_LISTENER, logToFile);
 	}
-	std::string newLogServer = cfgLoadStr("log", "LogServer", "");
+	std::string newLogServer = config::loadStr("log", "LogServer");
 	if (logServer != newLogServer)
 	{
 		logServer = newLogServer;
 		RegisterListener(LogListener::NETWORK_LISTENER, new NetworkListener(logServer));
 		EnableListener(LogListener::NETWORK_LISTENER, !logServer.empty());
 	}
-}
-
-// Return the current time formatted as Minutes:Seconds:Milliseconds
-// in the form 00:00:000.
-static std::string GetTimeFormatted()
-{
-	u64 now = getTimeMs();
-	u32 ms = (u32)(now % 1000);
-	now /= 1000;
-	u32 seconds = (u32)(now % 60);
-	now /= 60;
-	u32 minutes = (u32)now;
-	return StringFromFormat("%02d:%02d:%03d", minutes, seconds, ms);
 }
 
 void LogManager::Log(LogTypes::LOG_LEVELS level, LogTypes::LOG_TYPE type, const char* file,
@@ -204,16 +192,29 @@ void LogManager::LogWithFullPath(LogTypes::LOG_LEVELS level, LogTypes::LOG_TYPE 
 	if (!IsEnabled(type, level) || !static_cast<bool>(m_listener_ids))
 		return;
 
-	char temp[MAX_MSGLEN];
-	CharArrayFromFormatV(temp, MAX_MSGLEN, format, args);
+	char msg[MAX_MSGLEN + 128];
 
-	std::string msg =
-			StringFromFormat("%s %s:%u %c[%s]: %s\n", GetTimeFormatted().c_str(), file,
-					line, LogTypes::LOG_LEVEL_TO_CHAR[(int)level], GetShortName(type), temp);
+	u64 now = getTimeMs();
+	const u32 ms = (u32)(now % 1000);
+	now /= 1000;
+	const u32 seconds = (u32)(now % 60);
+	now /= 60;
+	const u32 minutes = (u32)now;
+
+	{
+		UseCLocale _;
+
+		int index = snprintf(msg, 128, "%02d:%02d:%03d %s:%u %c[%s]: ", minutes, seconds, ms, file,
+						line, LogTypes::LOG_LEVEL_TO_CHAR[(int)level], GetShortName(type));
+		index = std::min(index, 128);
+		int n = vsnprintf(msg + index, sizeof(msg) - index - 1, format, args);
+		index += std::min(n, (int)sizeof(msg) - index - 2);
+		strcpy(msg + index, "\n");
+	}
 
 	for (auto listener_id : m_listener_ids)
 		if (m_listeners[listener_id])
-			m_listeners[listener_id]->Log(level, msg.c_str());
+			m_listeners[listener_id]->Log(level, msg);
 }
 
 LogTypes::LOG_LEVELS LogManager::GetLogLevel() const

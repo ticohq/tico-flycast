@@ -22,6 +22,7 @@
 #include <cctype>
 #include <iomanip>
 #include <sstream>
+#include <locale>
 #include "types.h"
 #include "version.h"
 
@@ -30,12 +31,12 @@ namespace http {
 void init();
 void term();
 
-int get(const std::string& url, std::vector<u8>& content, std::string& content_type);
+using Headers = std::vector<std::pair<std::string, std::string>>;
 
-static inline int get(const std::string& url, std::vector<u8>& content) {
-	 std::string contentType;
-	 return get(url, content, contentType);
-}
+int get(const std::string& url, std::vector<u8>& content,
+		const Headers *reqHeaders = nullptr, Headers *respHeaders = nullptr);
+
+int get(const std::string& url, std::vector<u8>& content, std::string& contentType);
 
 struct PostField
 {
@@ -60,6 +61,7 @@ static inline bool success(int status) {
 static inline std::string urlEncode(const std::string& value)
 {
 	std::ostringstream escaped;
+	escaped.imbue(std::locale::classic());
 	escaped.fill('0');
 	escaped << std::hex;
 
@@ -85,6 +87,39 @@ static inline std::string urlEncode(const std::string& value)
 static inline std::string getUserAgent() {
 	std::string uaVersion(GIT_VERSION);
 	return "Flycast/" + uaVersion.substr(1); // skip 'v'
+}
+
+static inline std::string urlDecode(const std::string& encoded)
+{
+	std::ostringstream decoded;
+	decoded.imbue(std::locale::classic());
+
+	for (size_t i = 0; i < encoded.length(); i++)
+	{
+		const char c = encoded[i];
+		switch (c)
+		{
+		case '%':
+			{
+				++i;
+				if (i + 1 >= encoded.length())
+					break;
+				int n;
+				sscanf(&encoded[i], "%2x", &n);
+				decoded << (char)n;
+				++i;
+			}
+			break;
+		case '+':
+			decoded << ' ';
+			break;
+
+		default:
+			decoded << c;
+			break;
+		}
+	}
+	return decoded.str();
 }
 
 }

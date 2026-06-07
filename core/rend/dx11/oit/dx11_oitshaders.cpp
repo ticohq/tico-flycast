@@ -116,7 +116,7 @@ cbuffer constantBuffer : register(b0)
 	float4 colorClampMax;
 	float4 FOG_COL_VERT;
 	float4 FOG_COL_RAM;
-	float4 ditherColorMax;
+	float4 ditherDivisor;
 	float fogDensity;
 	float shadowScale;
 	float alphaTestValue;
@@ -405,13 +405,7 @@ PSO main(in VertexIn inpix)
 		float4 texcol;
 		#if pp_TwoVolumes == 1
 			if (area1)
-				#if pp_Palette == 0
-					texcol = texture1.Sample(sampler1, uv);
-				#elif pp_Palette == 1
-					texcol = palettePixel(texture1, sampler1, uv);
-				#else
-					texcol = palettePixelBilinear(texture1, sampler1, uv);
-				#endif
+				texcol = texture1.Sample(sampler1, uv);
 			else
 		#endif
 		#if pp_Palette == 0
@@ -652,16 +646,14 @@ float4 resolveAlphaBlend(in float2 pos)
 	}
 #if DITHERING == 1
 	static const float ditherTable[16] = {
-		 0.9375f,  0.1875f,  0.75f,  0.0f,   
-		 0.4375f,  0.6875f,  0.25f,  0.5f,
-		 0.8125f,  0.0625f,  0.875f, 0.125f,
-		 0.3125f,  0.5625f,  0.375f, 0.625f	
+		5.0f, 13.0f,  7.0f, 15.0f,
+		9.0f,  1.0f, 11.0f,  3.0f,
+		6.0f, 14.0f,  4.0f, 12.0f,
+		10.0f, 2.0f,  8.0f,  0.0f
 	};
-	float r = ditherTable[int(pos.y % 4.0f) * 4 + int(pos.x % 4.0f)] + 0.03125f; // why is this bias needed??
-	// 31 for 5-bit color, 63 for 6 bits, 15 for 4 bits
-	finalColor += r / ditherColorMax;
-	// avoid rounding
-	finalColor = floor(finalColor * 255.0f) / 255.0f;
+	float r = ditherTable[int(pos.y % 4.0f) * 4 + int(pos.x % 4.0f)];
+	float4 dv = float4(r, r, r, 1.0f) / ditherDivisor;
+	finalColor = clamp(floor(finalColor * 255.0f + dv) / 255.0f, 0.0f, 1.0f);
 #endif
 
 	return finalColor;
@@ -951,19 +943,25 @@ const ComPtr<ID3D11PixelShader>& DX11OITShaders::getModVolShader()
 	return modVolShader;
 }
 
-const ComPtr<ID3D11PixelShader>& DX11OITShaders::getFinalShader(bool dithering)
+void DX11OITShaders::checkMaxLayers()
 {
-	if (maxLayers != config::PerPixelLayers)
+	int layers = std::clamp<int>(config::PerPixelLayers, 1, 256);
+	if (maxLayers != layers)
 	{
 		for (auto& shader : finalShaders)
 			shader.reset();
 		for (auto& shader : trModVolShaders)
 			shader.reset();
-		maxLayers = config::PerPixelLayers;
+		maxLayers = layers;
 	}
+}
+
+const ComPtr<ID3D11PixelShader>& DX11OITShaders::getFinalShader(bool dithering)
+{
+	checkMaxLayers();
 	if (!finalShaders[dithering])
 	{
-		const std::string maxLayers{ std::to_string(config::PerPixelLayers) };
+		const std::string maxLayers{ std::to_string(this->maxLayers) };
 		D3D_SHADER_MACRO macros[]
 		{
 			{ "MAX_PIXELS_PER_FRAGMENT", maxLayers.c_str() },
@@ -985,19 +983,12 @@ const ComPtr<ID3D11VertexShader>& DX11OITShaders::getFinalVertexShader()
 
 const ComPtr<ID3D11PixelShader>& DX11OITShaders::getTrModVolShader(int type)
 {
-	if (maxLayers != config::PerPixelLayers)
-	{
-		for (auto& shader : finalShaders)
-			shader.reset();
-		for (auto& shader : trModVolShaders)
-			shader.reset();
-		maxLayers = config::PerPixelLayers;
-	}
+	checkMaxLayers();
 	bool divPosZ = !settings.platform.isNaomi2() && config::NativeDepthInterpolation;
 	ComPtr<ID3D11PixelShader>& shader = trModVolShaders[type | ((int)divPosZ << 3)];
 	if (!shader)
 	{
-		const std::string maxLayers{ std::to_string(config::PerPixelLayers) };
+		const std::string maxLayers{ std::to_string(this->maxLayers) };
 		D3D_SHADER_MACRO macros[]
 		{
 			{ "MV_MODE", MacroValues[type] },

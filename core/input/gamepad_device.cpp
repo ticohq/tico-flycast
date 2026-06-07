@@ -56,20 +56,40 @@ std::mutex GamepadDevice::_gamepads_mutex;
 static FILE *record_input;
 #endif
 
+GamepadDevice::GamepadDevice(int maple_port, const char *api_name, bool remappable)
+	: _api_name(api_name), _maple_port(maple_port), _remappable(remappable),
+	  digitalToAnalogState{}
+{
+	EventManager::listen(Event::LocaleChange, emuEvent, this);
+	// Initialize pressedButtons sets
+	currentInputs.clear();
+}
+
+GamepadDevice::~GamepadDevice() {
+	EventManager::unlisten(Event::LocaleChange, emuEvent, this);
+}
+
+void GamepadDevice::emuEvent(Event event, void *arg) {
+	((GamepadDevice *)arg)->refreshName();
+}
+
 bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 {
 	if (key == EMU_BTN_NONE)
 		return false;
 
+	if (buttonListener != nullptr)
+		buttonListener(port, key, pressed);
+	DEBUG_LOG(INPUT, "%d: BUTTON %s %d. kcode=%x", port, pressed ? "down" : "up", key, port >= 0 ? kcode[port] : 0);
+
 	if (key <= DC_BTN_BITMAPPED_LAST)
 	{
-		if (port >= 0)
-		{
-			if (pressed)
-				kcode[port] &= ~key;
-			else
-				kcode[port] |= key;
-		}
+		if (port < 0)
+			return false;
+		if (pressed)
+			kcode[port] &= ~key;
+		else
+			kcode[port] |= key;
 #ifdef TEST_AUTOMATION
 		if (record_input != NULL)
 			fprintf(record_input, "%ld button %x %04x\n", sh4_sched_now64(), port, kcode[port]);
@@ -79,13 +99,17 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 	{
 		switch (key)
 		{
+		case EMU_BTN_MENU:
+			if (pressed)
+				gui_open_settings();
+			break;
 		case EMU_BTN_ESCAPE:
 			if (pressed)
 				dc_exit();
 			break;
-		case EMU_BTN_MENU:
+		case EMU_BTN_PAUSE:
 			if (pressed)
-				gui_open_settings();
+				gui_togglePause();
 			break;
 		case EMU_BTN_FFORWARD:
 			if (pressed && !gui_is_open())
@@ -98,6 +122,22 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 		case EMU_BTN_SAVESTATE:
 			if (pressed)
 				gui_saveState();
+			break;
+		case EMU_BTN_NEXTSLOT:
+			if (pressed)
+				gui_cycleSaveStateSlot(1);
+			break;
+		case EMU_BTN_PREVSLOT:
+			if (pressed)
+				gui_cycleSaveStateSlot(-1);
+			break;
+		case EMU_BTN_LOADSTATE_RAM:
+			if (pressed)
+				gui_loadState(true);
+			break;
+		case EMU_BTN_SAVESTATE_RAM:
+			if (pressed)
+				gui_saveState(false, true);
 			break;
 		case EMU_BTN_SCREENSHOT:
 			if (pressed)
@@ -148,39 +188,93 @@ bool GamepadDevice::handleButtonInput(int port, DreamcastKey key, bool pressed)
 			return false;
 		}
 	}
-	DEBUG_LOG(INPUT, "%d: BUTTON %s %d. kcode=%x", port, pressed ? "down" : "up", key, port >= 0 ? kcode[port] : 0);
 
 	return true;
 }
 
-bool GamepadDevice::gamepad_btn_input(u32 code, bool pressed)
+bool GamepadDevice::handleButtonInputDef(const InputMapping::InputDef& inputDef, bool pressed)
 {
-	if (_input_detected != nullptr && _detecting_button
-			&& getTimeMs() >= _detection_start_time && pressed)
-	{
-		_input_detected(code, false, false);
-		_input_detected = nullptr;
-		return true;
-	}
 	if (!input_mapper || _maple_port > (int)std::size(kcode))
 		return false;
 
-	bool rc = false;
-	if (_maple_port == 4)
+	// Update button press tracking
+	std::list<DreamcastKey> mappedKeys;
+
+	if (pressed)
 	{
-		for (int port = 0; port < 4; port++)
+		// Add to triggered inputs
+		if (currentInputs.insert_back(inputDef))
 		{
-			DreamcastKey key = input_mapper->get_button_id(port, code);
-			rc = handleButtonInput(port, key, pressed) || rc;
+			// Handle keys activated by this new input
+			DreamcastKey mappedKey = input_mapper->get_button_id(0, currentInputs);
+			if (mappedKey != EMU_BTN_NONE) {
+				mappedKeys.push_back(mappedKey);
+				currentKeys.push_back(mappedKey);
+			}
 		}
 	}
 	else
 	{
-		DreamcastKey key = input_mapper->get_button_id(0, code);
-		rc = handleButtonInput(_maple_port, key, pressed);
+		// Remove from triggered inputs
+		if (currentInputs.remove(inputDef) > 0)
+		{
+			// Handle keys deactivated by this new input
+			mappedKeys = input_mapper->get_button_released_ids(0, currentKeys, inputDef);
+			for (const DreamcastKey& mappedKey : mappedKeys)
+				currentKeys.remove(mappedKey);
+		}
+	}
+
+	bool rc = false;
+	for (const DreamcastKey& mappedKey : mappedKeys)
+		rc = handleButtonInput(_maple_port == 4 ? 0 : _maple_port, mappedKey, pressed) || rc;
+
+	// Handle inputs for ports 1 to 3 in all-ports mode
+	// Combos are only detected on port 0 in this mode
+	if (_maple_port == 4)
+	{
+		const InputMapping::InputSet simpleInput{inputDef};
+		for (int port = 1; port < 4; port++) {
+			DreamcastKey mappedKey = input_mapper->get_button_id(port, simpleInput);
+			rc = handleButtonInput(port, mappedKey, pressed) || rc;
+		}
 	}
 
 	return rc;
+}
+
+bool GamepadDevice::gamepad_btn_input(u32 code, bool pressed)
+{
+	const InputMapping::InputDef inputDef = InputMapping::InputDef::from_button(code);
+
+	// When detecting input for button mapping
+	if (_input_detected != nullptr && getTimeMs() >= _detection_start_time)
+	{
+		if (pressed)
+		{
+			// Button pressed - add to mapping and tracking
+			_input_detected(code, false, false);
+			detectionInputs.insert_back(inputDef);
+
+			// If we're not in combo detection mode, stop detecting after first button
+			if (!_detecting_combo)
+			{
+				_input_detected = nullptr;
+				detectionInputs.clear();
+			}
+		}
+		else if (_detecting_combo && detectionInputs.contains(inputDef))
+		{
+			// Button released - if this is a button we pressed during detection, end detection
+			_input_detected = nullptr;
+			detectionInputs.clear();
+			DEBUG_LOG(INPUT, "Ending combo detection on button release: %d", code);
+		}
+
+		return true;
+	}
+
+	return handleButtonInputDef(inputDef, pressed);
 }
 
 static DreamcastKey getOppositeAxis(DreamcastKey key)
@@ -203,36 +297,96 @@ static DreamcastKey getOppositeAxis(DreamcastKey key)
 	}
 }
 
-//
-// value must be >= -32768 and <= 32767 for full axes
-// and 0 to 32767 for half axes/triggers
-//
-bool GamepadDevice::gamepad_axis_input(u32 code, int value)
+bool GamepadDevice::detectAxis(u32 code, int value)
 {
-	bool positive = value >= 0;
-	if (_input_detected != NULL && _detecting_axis
-			&& getTimeMs() >= _detection_start_time && std::abs(value) >= 16384)
+	if (_input_detected == nullptr || getTimeMs() < _detection_start_time)
+		return false;
+
+	const auto& r = detectingAxes.try_emplace(code, value);
+	DetectingAxis& axis = r.first->second;
+	if (!r.second)
+		axis.setValue(value);
+
+	if (!axis.detected)
+		return false;
+
+	const bool isTrigger = axis.start != DetectingAxis::Zero;
+	const bool positive = isTrigger || axis.end == DetectingAxis::Positive;
+	const InputMapping::InputDef inputDef = InputMapping::InputDef::from_axis(code, positive);
+
+	// When in combo detection, track button releases for axes too
+	if (_detecting_combo && axis.released)
+	{
+		// If this is an axis we previously detected as pressed, end detection
+		if (detectionInputs.contains(inputDef))
+		{
+			_input_detected = nullptr;
+			detectionInputs.clear();
+			DEBUG_LOG(INPUT, "Ending combo detection on axis release: %d", code);
+		}
+		return false;
+	}
+
+	if (input_mapper != nullptr)
+	{
+		if (!isTrigger)
+			input_mapper->deleteTrigger(code);
+		else
+			input_mapper->addTrigger(code, axis.start == DetectingAxis::Positive);
+	}
+
+	// If we're in combo detection mode, add this axis to tracking but don't end detection
+	if (_detecting_combo)
+	{
+		// Track this axis as a "button" for combo detection
+		if (detectionInputs.insert_back(inputDef))
+			_input_detected(code, true, positive);
+	}
+	else
 	{
 		_input_detected(code, true, positive);
 		_input_detected = nullptr;
-		return true;
 	}
+	return true;
+}
+
+//
+// value must be >= -32768 and <= 32767 for all axes
+//
+bool GamepadDevice::gamepad_axis_input(u32 code, int value)
+{
+	if (detectAxis(code, value))
+		return true;
+
 	if (!input_mapper || _maple_port < 0 || _maple_port > 4)
 		return false;
 
-	auto handle_axis = [&](u32 port, DreamcastKey key, int v)
+	const bool positive = input_mapper->isTrigger(code) || value >= 0;
+	const InputMapping::InputDef inputDef = InputMapping::InputDef::from_axis(code, positive);
+
+	auto handle_axis = [&](u32 port, DreamcastKey key, int v, u32 code)
 	{
 		if ((key & DC_BTN_GROUP_MASK) == DC_AXIS_TRIGGERS)	// Triggers
 		{
-			//printf("T-AXIS %d Mapped to %d -> %d\n", key, value, std::min(std::abs(v) >> 7, 255));
+			int mv;
+			if (input_mapper->isTrigger(code))
+			{
+				mv = v + 32768;
+				if (input_mapper->isReverseTrigger(code))
+					mv = 65535 - mv;
+			}
+			else {
+				mv = std::min(std::abs(v) * 2, 0xffff);
+			}
+			//printf("T-AXIS %d Mapped to %d -> %d\n", key, v, mv);
 			if (key == DC_AXIS_LT)
-				lt[port] = std::min(std::abs(v) << 1, 0xffff);
+				lt[port] = mv;
 			else if (key == DC_AXIS_RT)
-				rt[port] = std::min(std::abs(v) << 1, 0xffff);
+				rt[port] = mv;
 			else if (key == DC_AXIS_LT2)
-				lt2[port] = std::min(std::abs(v) << 1, 0xffff);
+				lt2[port] = mv;
 			else if (key == DC_AXIS_RT2)
-				rt2[port] = std::min(std::abs(v) << 1, 0xffff);
+				rt2[port] = mv;
 			else
 				return false;
 		}
@@ -326,22 +480,40 @@ bool GamepadDevice::gamepad_axis_input(u32 code, int value)
 		{
 			//printf("B-AXIS %d Mapped to %d -> %d\n", key, value, v);
 			// TODO hysteresis?
-			int threshold = 16384;
-			if (code == leftTrigger || code == rightTrigger )
-				threshold = 100;
+			bool pressed = false;
+			if (input_mapper->isTrigger(code))
+			{
+				if (!input_mapper->isReverseTrigger(code))
+					pressed = v >= -32768 + 100;	// positive range -32768 -> 32767
+				else
+					pressed = v <= 32767 - 100;		// negative range 32767 -> -32768
+			}
+			else {
+				pressed = std::abs(v) >= AXIS_ACTIVATION_VALUE;
+			}
 
-			if (std::abs(v) < threshold)
-				kcode[port] |=  key; // button released
-			else
+			if (pressed)
 				kcode[port] &= ~key; // button pressed
+			else
+				kcode[port] |=  key; // button released
 		}
 		else if ((key & DC_BTN_GROUP_MASK) == EMU_BUTTONS) // Map triggers to emu buttons
 		{
 			int lastValue = lastAxisValue[port][key];
-			int newValue = std::abs(v);
-			if ((lastValue < 16384 && newValue >= 16384) || (lastValue >= 16384 && newValue < 16384))
-				handleButtonInput(port, key, newValue >= 16384);
-			lastAxisValue[port][key] = newValue;
+			if (input_mapper->isTrigger(code))
+			{
+				// 0 is the midpoint for half axes
+				if ((v >= 0) != (lastValue >= 0))
+					handleButtonInput(port, key, input_mapper->isReverseTrigger(code) == (v < 0));
+			}
+			else
+			{
+				lastValue = std::abs(lastValue);
+				int newValue = std::abs(v);
+				if ((lastValue < AXIS_ACTIVATION_VALUE && newValue >= AXIS_ACTIVATION_VALUE) || (lastValue >= AXIS_ACTIVATION_VALUE && newValue < AXIS_ACTIVATION_VALUE))
+					handleButtonInput(port, key, newValue >= AXIS_ACTIVATION_VALUE);
+			}
+			lastAxisValue[port][key] = v;
 		}
 		else
 			return false;
@@ -354,19 +526,49 @@ bool GamepadDevice::gamepad_axis_input(u32 code, int value)
 	{
 		for (u32 port = 0; port < 4; port++)
 		{
-			DreamcastKey key = input_mapper->get_axis_id(port, code, !positive);
-			handle_axis(port, key, 0);
-			key = input_mapper->get_axis_id(port, code, positive);
-			rc = handle_axis(port, key, value) || rc;
+			if (!input_mapper->isTrigger(code)) {
+				DreamcastKey key = input_mapper->get_axis_id(port, code, !positive);
+				// Reset opposite axis to 0
+				handle_axis(port, key, 0, code);
+			}
+			DreamcastKey key = input_mapper->get_axis_id(port, code, positive);
+			rc = handle_axis(port, key, value, code) || rc;
 		}
 	}
 	else
 	{
-		DreamcastKey key = input_mapper->get_axis_id(0, code, !positive);
+		if (!input_mapper->isTrigger(code)) {
+			DreamcastKey key = input_mapper->get_axis_id(0, code, !positive);
+			// Reset opposite axis to 0
+			handle_axis(_maple_port, key, 0, code);
+		}
+		DreamcastKey key = input_mapper->get_axis_id(0, code, positive);
+		rc = handle_axis(_maple_port, key, value, code);
+	}
+
+	// Update axis press tracking for button combinations
+	bool pressed = false;
+	bool released = false;
+	if (input_mapper->isTrigger(code))
+	{
+		if (!input_mapper->isReverseTrigger(code))
+			pressed = value >= -32768 + 100;	// normal range -32768 -> 32767
+		else
+			pressed = value <= 32767 - 100;		// reverse range 32767 -> -32768
+		released = !pressed;
+	}
+	else {
+		pressed = std::abs(value) >= AXIS_ACTIVATION_VALUE;
+		released = std::abs(value) < AXIS_ACTIVATION_VALUE;
+	}
+	if (pressed || released)
+	{
 		// Reset opposite axis to 0
-		handle_axis(_maple_port, key, 0);
-		key = input_mapper->get_axis_id(0, code, positive);
-		rc = handle_axis(_maple_port, key, value);
+		if (!input_mapper->isTrigger(code)) {
+			const InputMapping::InputDef inverseInputDef = InputMapping::InputDef::from_axis(code, !positive);
+			rc = handleButtonInputDef(inverseInputDef, false) || rc;
+		}
+		rc = handleButtonInputDef(inputDef, pressed) || rc;
 	}
 
 	return rc;
@@ -377,7 +579,7 @@ void GamepadDevice::load_system_mappings()
 	for (int i = 0; i < GetGamepadCount(); i++)
 	{
 		std::shared_ptr<GamepadDevice> gamepad = GetGamepad(i);
-		if (!gamepad->find_mapping())
+		if (gamepad != nullptr && !gamepad->find_mapping())
 			gamepad->resetMappingToDefault(settings.platform.isArcade(), true);
 	}
 }
@@ -407,6 +609,8 @@ std::string GamepadDevice::make_mapping_filename(bool instance, int system, bool
 
 bool GamepadDevice::find_mapping(int system /* = settings.platform.system */)
 {
+	// FIXME this is called on Event::Start in the game loader thread
+	// race condition with the UI thread?
 	if (!_remappable)
 		return true;
 	instanceMapping = false;
@@ -487,6 +691,67 @@ void GamepadDevice::setPerGameMapping(bool enabled)
 	}
 }
 
+void GamepadDevice::clearButtonMapping(u32 port, DreamcastKey key)
+{
+	if (input_mapper == nullptr)
+		return;
+	// Release the button
+	if (key <= DC_BTN_BITMAPPED_LAST && port >= 0 && port < std::size(kcode))
+		kcode[port] |= key;
+	input_mapper->clear_button(port, key);
+}
+void GamepadDevice::clearAxisMapping(u32 port, DreamcastKey key)
+{
+	if (input_mapper == nullptr)
+		return;
+	// Reset the axis value
+	if (port >= 0 && port < MAPLE_PORTS)
+	{
+		switch (key)
+		{
+		case DC_AXIS_UP:
+		case DC_AXIS_DOWN:
+			joyy[port] = 0;
+			break;
+		case DC_AXIS_LEFT:
+		case DC_AXIS_RIGHT:
+			joyx[port] = 0;
+			break;
+		case DC_AXIS2_UP:
+		case DC_AXIS2_DOWN:
+			joyry[port] = 0;
+			break;
+		case DC_AXIS2_LEFT:
+		case DC_AXIS2_RIGHT:
+			joyrx[port] = 0;
+			break;
+		case DC_AXIS3_UP:
+		case DC_AXIS3_DOWN:
+			joy3y[port] = 0;
+			break;
+		case DC_AXIS3_LEFT:
+		case DC_AXIS3_RIGHT:
+			joy3x[port] = 0;
+			break;
+		case DC_AXIS_RT:
+			rt[port] = 0;
+			break;
+		case DC_AXIS_LT:
+			lt[port] = 0;
+			break;
+		case DC_AXIS_RT2:
+			rt2[port] = 0;
+			break;
+		case DC_AXIS_LT2:
+			lt2[port] = 0;
+			break;
+		default:
+			break;
+		}
+	}
+	input_mapper->clear_axis(port, key);
+}
+
 static void updateVibration(u32 port, float power, float inclination, u32 duration_ms)
 {
 	int i = GamepadDevice::GetGamepadCount() - 1;
@@ -498,36 +763,21 @@ static void updateVibration(u32 port, float power, float inclination, u32 durati
 	}
 }
 
-void GamepadDevice::detect_btn_input(input_detected_cb button_pressed)
-{
-	_input_detected = button_pressed;
-	_detecting_button = true;
-	_detecting_axis = false;
-	_detection_start_time = getTimeMs() + 200;
-}
-
-void GamepadDevice::detect_axis_input(input_detected_cb axis_moved)
-{
-	_input_detected = axis_moved;
-	_detecting_button = false;
-	_detecting_axis = true;
-	_detection_start_time = getTimeMs() + 200;
-}
-
-void GamepadDevice::detectButtonOrAxisInput(input_detected_cb input_changed)
+void GamepadDevice::detectInput(bool combo, input_detected_cb input_changed)
 {
 	_input_detected = input_changed;
-	_detecting_button = true;
-	_detecting_axis = true;
+	_detecting_combo = combo;
 	_detection_start_time = getTimeMs() + 200;
+	detectionInputs.clear();
+	detectingAxes.clear();
 }
 
 #ifdef TEST_AUTOMATION
 static FILE *get_record_input(bool write)
 {
-	if (write && !cfgLoadBool("record", "record_input", false))
+	if (write && !config::loadBool("record", "record_input", false))
 		return NULL;
-	if (!write && !cfgLoadBool("record", "replay_input", false))
+	if (!write && !config::loadBool("record", "replay_input", false))
 		return NULL;
 	std::string game_dir = settings.content.path;
 	size_t slash = game_dir.find_last_of("/");
@@ -539,7 +789,7 @@ static FILE *get_record_input(bool write)
 
 void GamepadDevice::Register(const std::shared_ptr<GamepadDevice>& gamepad)
 {
-	int maple_port = cfgLoadInt("input",
+	int maple_port = config::loadInt("input",
 			MAPLE_PORT_CFG_PREFIX + gamepad->unique_id(), 12345);
 	if (maple_port != 12345)
 		gamepad->set_maple_port(maple_port);
@@ -575,7 +825,7 @@ void GamepadDevice::SaveMaplePorts()
 	{
 		std::shared_ptr<GamepadDevice> gamepad = GamepadDevice::GetGamepad(i);
 		if (gamepad != NULL && !gamepad->unique_id().empty())
-			cfgSaveInt("input", MAPLE_PORT_CFG_PREFIX + gamepad->unique_id(), gamepad->maple_port());
+			config::saveInt("input", MAPLE_PORT_CFG_PREFIX + gamepad->unique_id(), gamepad->maple_port());
 	}
 }
 

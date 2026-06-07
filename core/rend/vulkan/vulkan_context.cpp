@@ -53,6 +53,7 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #endif
 
 #include <memory>
+#include <set>
 #include <vulkan/vulkan_format_traits.hpp>
 
 void ReInitOSD();
@@ -162,7 +163,7 @@ bool VulkanContext::InitInstance(const char** extensions, uint32_t extensions_co
 #elif defined(__ANDROID__) && HOST_CPU == CPU_ARM64
 		vkGetInstanceProcAddr = loadVulkanDriver();
 #else
-		static vk::DynamicLoader dl;
+		static vk::detail::DynamicLoader dl;
 		vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
 #endif
 		if (vkGetInstanceProcAddr == nullptr) {
@@ -343,7 +344,7 @@ void VulkanContext::InitImgui()
 	initInfo.Queue = (VkQueue)graphicsQueue;
 	initInfo.PipelineCache = (VkPipelineCache)*pipelineCache;
 	initInfo.DescriptorPool = (VkDescriptorPool)*descriptorPool;
-	initInfo.RenderPass = (VkRenderPass)*renderPass;
+	initInfo.PipelineInfoMain.RenderPass = (VkRenderPass)*renderPass;
 	initInfo.MinImageCount = 2;
 	initInfo.ImageCount = GetSwapChainSize();
 #ifdef VK_DEBUG
@@ -351,15 +352,13 @@ void VulkanContext::InitImgui()
 #endif
 
 #if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
-	ImGui_ImplVulkan_LoadFunctions([](const char *function_name, void *) {
+	ImGui_ImplVulkan_LoadFunctions(0, [](const char *function_name, void *) {
 		return VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr((VkInstance) *contextInstance->instance, function_name);
 	});
 #endif
 
 	if (!ImGui_ImplVulkan_Init(&initInfo))
-	{
-		die("ImGui initialization failed");
-	}
+		throw FlycastException("Vulkan ImGui initialization failed");
 }
 
 bool VulkanContext::InitDevice()
@@ -412,8 +411,10 @@ bool VulkanContext::InitDevice()
 				}
 			}
 		}
-		if (graphicsQueueIndex == queueFamilyProperties.size() || presentQueueIndex == queueFamilyProperties.size())
-			die("Could not find a queue for graphics or present -> terminating");
+		if (graphicsQueueIndex == queueFamilyProperties.size() || presentQueueIndex == queueFamilyProperties.size()) {
+			ERROR_LOG(RENDERER, "Could not find a queue for graphics or present");
+			return false;
+		}
 		if (graphicsQueueIndex == presentQueueIndex)
 			DEBUG_LOG(RENDERER, "Using Graphics+Present queue family");
 		else
@@ -614,7 +615,7 @@ bool VulkanContext::InitDevice()
 	{
 		ERROR_LOG(RENDERER, "Vulkan error: %s", err.what());
 	}
-	catch (const InvalidVulkanContext& err)
+	catch (const InvalidVulkanContext&)
 	{
 	}
 	catch (...)
@@ -647,6 +648,8 @@ void VulkanContext::CreateSwapChain()
 		commandPools.clear();
 		for (auto& img : imageViews)
 			img.reset();
+		rendering = false;
+		renderDone = false;
 
 		// Determine surface format and color-space
 		std::vector<vk::SurfaceFormatKHR> surfaceFormats = physicalDevice.getSurfaceFormatsKHR(GetSurface());
@@ -695,9 +698,12 @@ void VulkanContext::CreateSwapChain()
 
 			// The FIFO present mode is guaranteed by the spec to be supported
 			vk::PresentModeKHR swapchainPresentMode = vk::PresentModeKHR::eFifo;
+			bool mailboxSupported = false;
 			// Use FIFO on mobile, prefer Mailbox on desktop
 			for (auto& presentMode : physicalDevice.getSurfacePresentModesKHR(GetSurface()))
 			{
+				if (presentMode == vk::PresentModeKHR::eMailbox)
+					mailboxSupported = true;
 #if HOST_CPU != CPU_ARM && HOST_CPU != CPU_ARM64 && !defined(__ANDROID__)
 				if (swapOnVSync && presentMode == vk::PresentModeKHR::eMailbox
 						&& vendorID != VENDOR_ATI && vendorID != VENDOR_AMD)
@@ -713,6 +719,12 @@ void VulkanContext::CreateSwapChain()
 					swapchainPresentMode = vk::PresentModeKHR::eImmediate;
 					break;
 				}
+			}
+			if (!swapOnVSync && swapchainPresentMode == vk::PresentModeKHR::eFifo && mailboxSupported)
+			{
+				// prefer mailbox over FIFO if immediate isn't available
+				INFO_LOG(RENDERER, "Using mailbox present mode");
+				swapchainPresentMode = vk::PresentModeKHR::eMailbox;
 			}
 			if (swapOnVSync && config::DupeFrames && settings.display.refreshRate > 60.f)
 				swapInterval = settings.display.refreshRate / 60.f;
@@ -776,6 +788,10 @@ void VulkanContext::CreateSwapChain()
 		}
 
 	    depthFormat = findDepthFormat(physicalDevice);
+		if (depthFormat == vk::Format::eUndefined) {
+			SetWindowSize(0, 0);
+			throw InvalidVulkanContext();
+		}
 
 	    // Render pass
 	    vk::AttachmentDescription attachmentDescription = vk::AttachmentDescription(vk::AttachmentDescriptionFlags(), presentFormat, vk::SampleCountFlagBits::e1,
@@ -925,8 +941,16 @@ void VulkanContext::NewFrame()
 	if (!IsValid())
 		throw InvalidVulkanContext();
 	vk::Result res = device->acquireNextImageKHR(*swapChain, UINT64_MAX, *imageAcquiredSemaphores[currentSemaphore], nullptr, &currentImage);
-	res = device->waitForFences(*drawFences[currentImage], true, UINT64_MAX);
-	(void)res;
+	if (res != vk::Result::eSuccess)
+		throw InvalidVulkanContext();
+	try {
+		res = device->waitForFences(*drawFences[currentImage], true, UINT64_MAX);
+		if (res != vk::Result::eSuccess)
+			throw InvalidVulkanContext();
+	} catch (const vk::SystemError& e) {
+		WARN_LOG(RENDERER, "vk:SystemError: %s", e.what());
+		throw FlycastException("Vulkan system error");
+	}
 	device->resetCommandPool(*commandPools[currentImage], vk::CommandPoolResetFlagBits::eReleaseResources);
 	inFlightObjects[currentImage].clear();
 	vk::CommandBuffer commandBuffer = *commandBuffers[currentImage];
@@ -986,6 +1010,7 @@ void VulkanContext::Present() noexcept
 			// Happens when resizing the window
 			INFO_LOG(RENDERER, "vk::SystemError %s", e.what());
 			resized = true;
+			width = height = 0;
 		}
 		renderDone = false;
 	}
@@ -998,7 +1023,7 @@ void VulkanContext::Present() noexcept
 		try {
 			CreateSwapChain();
 			lastFrameView = vk::ImageView();
-		} catch (const InvalidVulkanContext& err) {
+		} catch (const InvalidVulkanContext&) {
 		}
 }
 
@@ -1027,21 +1052,17 @@ void VulkanContext::DrawFrame(vk::ImageView imageView, const vk::Extent2D& exten
 	else
 		quadPipeline->BindPipeline(commandBuffer);
 
-	float screenAR = (float)width / height;
-	float dx = 0;
-	float dy = 0;
-	if (aspectRatio > screenAR)
-		dy = height * (1 - screenAR / aspectRatio) / 2;
-	else
-		dx = width * (1 - aspectRatio / screenAR) / 2;
-
+	int dx = 0;
+	int dy = 0;
+	getWindowboxDimensions(width, height, aspectRatio, dx, dy, config::Rotate90);
+	
 	vk::Viewport viewport(dx, dy, width - dx * 2, height - dy * 2);
 	commandBuffer.setViewport(0, viewport);
 	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(dx, dy), vk::Extent2D(width - dx * 2, height - dy * 2)));
 	if (config::Rotate90)
-		quadRotateDrawer->Draw(commandBuffer, imageView, vtx, config::TextureFiltering == 1);
+		quadRotateDrawer->Draw(commandBuffer, imageView, vtx, !config::LinearInterpolation);
 	else
-		quadDrawer->Draw(commandBuffer, imageView, vtx, config::TextureFiltering == 1);
+		quadDrawer->Draw(commandBuffer, imageView, vtx, !config::LinearInterpolation);
 }
 
 void VulkanContext::WaitIdle() const
@@ -1078,7 +1099,25 @@ void VulkanContext::PresentFrame(vk::Image image, vk::ImageView imageView, const
 			NewFrame();
 			auto overlayCmdBuffer = PrepareOverlay(config::FloatVMUs, true);
 			gui_draw_osd();
-
+			if (GetVendorID() == VulkanContext::VENDOR_NVIDIA && image)
+			{
+				vk::ImageMemoryBarrier barrier(
+						vk::AccessFlagBits::eColorAttachmentWrite,
+				        vk::AccessFlagBits::eShaderRead,
+				        vk::ImageLayout::eShaderReadOnlyOptimal,
+				        vk::ImageLayout::eShaderReadOnlyOptimal,
+				        VK_QUEUE_FAMILY_IGNORED,
+				        VK_QUEUE_FAMILY_IGNORED,
+				        image,
+				        vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+				GetCurrentCommandBuffer().pipelineBarrier(
+						vk::PipelineStageFlagBits::eColorAttachmentOutput,
+						vk::PipelineStageFlagBits::eFragmentShader,
+						{},
+						nullptr, nullptr,
+						barrier
+				);
+			}
 			BeginRenderPass();
 
 			if (lastFrameView) // Might have been nullified if swap chain recreated
@@ -1089,7 +1128,9 @@ void VulkanContext::PresentFrame(vk::Image image, vk::ImageView imageView, const
 			EndFrame(overlayCmdBuffer);
 			static_cast<BaseVulkanRenderer*>(renderer)->RenderVideoRouting();
 			
-		} catch (const InvalidVulkanContext& err) {
+		} catch (const InvalidVulkanContext&) {
+			// Re-create swap chain
+			resized = true;
 		}
 	}
 }
@@ -1109,9 +1150,12 @@ void VulkanContext::term()
 	if (device && !drawFences.empty())
 	{
 		std::vector<vk::Fence> allFences = vk::uniqueToRaw(drawFences);
-		vk::Result res = device->waitForFences(allFences, true, UINT64_MAX);
-		if (res != vk::Result::eSuccess)
-			WARN_LOG(RENDERER, "VulkanContext::term: waitForFences failed %d", (int)res);
+		try {
+			vk::Result res = device->waitForFences(allFences, true, UINT64_MAX);
+			if (res != vk::Result::eSuccess)
+				INFO_LOG(RENDERER, "VulkanContext::term: waitForFences failed %d", (int)res);
+		} catch (const vk::SystemError& e) {
+		}
 	}
 	inFlightObjects.clear();
 	imguiDriver.reset();
@@ -1178,7 +1222,7 @@ void VulkanContext::DoSwapAutomation()
 	{
 		bool supportsBlit = true;
 		vk::FormatProperties properties;
-		physicalDevice.getFormatProperties(colorFormat, &properties);
+		physicalDevice.getFormatProperties(presentFormat, &properties);
 		if (!(properties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eBlitSrc))
 			supportsBlit = false;
 		physicalDevice.getFormatProperties(vk::Format::eR8G8B8A8Unorm, &properties);
@@ -1263,7 +1307,7 @@ void VulkanContext::DoSwapAutomation()
 			img += subresourceLayout.offset;
 
 			u8 *end = img + settings.display.width * settings.display.height * 4;
-			if (!supportsBlit && colorFormat == vk::Format::eB8G8R8A8Unorm)
+			if (!supportsBlit && presentFormat == vk::Format::eB8G8R8A8Unorm)
 			{
 				for (u8 *p = img; p < end; p += 4)
 				{
@@ -1294,7 +1338,7 @@ bool VulkanContext::HasSurfaceDimensionChanged() const
 	vk::SurfaceCapabilitiesKHR surfaceCapabilities =
 			physicalDevice.getSurfaceCapabilitiesKHR(GetSurface());
 	vk::Extent2D swapchainExtent;
-	if (surfaceCapabilities.currentExtent.width == std::numeric_limits < uint32_t > ::max())
+	if (surfaceCapabilities.currentExtent.width == std::numeric_limits<uint32_t>::max())
 	{
 		// If the surface size is undefined, the size is set to the size of the images requested.
 		swapchainExtent.width = std::min(

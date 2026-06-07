@@ -1,10 +1,8 @@
 #include "glcache.h"
 #include "gles.h"
 #include "quad.h"
-#include "rend/tileclip.h"
 #include "rend/osd.h"
 #include "naomi2.h"
-#include "rend/transform_matrix.h"
 #ifdef LIBRETRO
 #include "postprocess.h"
 #include "vmu_xhair.h"
@@ -106,13 +104,13 @@ static void SetBaseClipping()
 		glcache.Disable(GL_SCISSOR_TEST);
 }
 
-static TileClipping setTileClip(u32 tileclip, int clip_rect[4])
+static TileClipping setTileClip(u32 tileclip, Rect& rect)
 {
-	TileClipping clipmode = GetTileClip(tileclip, ViewportMatrix, clip_rect);
+	TileClipping clipmode = gl.matrices.getTileClip(tileclip, rect);
 	if (clipmode == TileClipping::Outside)
 	{
 		glcache.Enable(GL_SCISSOR_TEST);
-		glcache.Scissor(clip_rect[0], clip_rect[1], clip_rect[2], clip_rect[3]);
+		glcache.Scissor(rect.origin.x, rect.origin.y, rect.size.x, rect.size.y);
 	}
 	else {
 		SetBaseClipping();
@@ -134,10 +132,10 @@ void SetGPState(const PolyParam* gp,u32 cflip=0)
 	else
 		trilinear_alpha = 1.f;
 
-	bool color_clamp = gp->tsp.ColorClamp && (pvrrc.fog_clamp_min.full != 0 || pvrrc.fog_clamp_max.full != 0xffffffff);
+	bool color_clamp = gp->tsp.ColorClamp && (gl.rendContext->fog_clamp_min.full != 0 || gl.rendContext->fog_clamp_max.full != 0xffffffff);
 	int fog_ctrl = config::Fog ? gp->tsp.FogCtrl : 2;
 
-	int clip_rect[4] = {};
+	Rect clip_rect;
 	TileClipping clipmode = setTileClip(gp->tileclip, clip_rect);
 	TextureCacheData *texture = (TextureCacheData *)gp->texture;
 	int gpuPalette = texture == nullptr || !texture->gpuPalette ? 0
@@ -185,8 +183,8 @@ void SetGPState(const PolyParam* gp,u32 cflip=0)
 	}
 
 	if (clipmode == TileClipping::Inside)
-		glUniform4f(CurrentShader->pp_ClipTest, (float)clip_rect[0], (float)clip_rect[1],
-				(float)(clip_rect[0] + clip_rect[2]), (float)(clip_rect[1] + clip_rect[3]));
+		glUniform4f(CurrentShader->pp_ClipTest, (float)clip_rect.origin.x, (float)clip_rect.origin.y,
+				(float)clip_rect.bottomRight().x, (float)clip_rect.bottomRight().y);
 
 	if (config::ModifierVolumes)
 	{
@@ -281,7 +279,7 @@ void SetGPState(const PolyParam* gp,u32 cflip=0)
 			glcache.DepthMask(!gp->isp.ZWriteDis);
 	}
 	if (CurrentShader->naomi2)
-		setN2Uniforms(gp, CurrentShader, pvrrc);
+		setN2Uniforms(gp, CurrentShader, *gl.rendContext);
 }
 
 template <u32 Type, bool SortingEnabled>
@@ -320,10 +318,10 @@ static void drawSorted(int first, int count, bool multipass)
 	int end = first + count;
 	for (int p = first; p < end; p++)
 	{
-		const PolyParam* params = &pvrrc.global_param_tr[pvrrc.sortedTriangles[p].polyIndex];
+		const PolyParam* params = &gl.rendContext->global_param_tr[gl.rendContext->sortedTriangles[p].polyIndex];
 		SetGPState<ListType_Translucent,true>(params);
-		glDrawElements(GL_TRIANGLES, pvrrc.sortedTriangles[p].count, gl.index_type,
-				(GLvoid*)(gl.get_index_size() * pvrrc.sortedTriangles[p].first));
+		glDrawElements(GL_TRIANGLES, gl.rendContext->sortedTriangles[p].count, gl.index_type,
+				(GLvoid*)(gl.get_index_size() * gl.rendContext->sortedTriangles[p].first));
 	}
 
 	if (multipass && config::TranslucentPolygonDepthMask)
@@ -343,7 +341,7 @@ static void drawSorted(int first, int count, bool multipass)
 
 		for (int p = first; p < end; p++)
 		{
-			const PolyParam* params = &pvrrc.global_param_tr[pvrrc.sortedTriangles[p].polyIndex];
+			const PolyParam* params = &gl.rendContext->global_param_tr[gl.rendContext->sortedTriangles[p].polyIndex];
 			if (!params->isp.ZWriteDis)
 			{
 				// FIXME no clipping in modvol shader
@@ -351,8 +349,8 @@ static void drawSorted(int first, int count, bool multipass)
 
 				SetCull(params->isp.CullMode ^ 1);
 
-				glDrawElements(GL_TRIANGLES, pvrrc.sortedTriangles[p].count, gl.index_type,
-						(GLvoid*)(gl.get_index_size() * pvrrc.sortedTriangles[p].first));
+				glDrawElements(GL_TRIANGLES, gl.rendContext->sortedTriangles[p].count, gl.index_type,
+						(GLvoid*)(gl.get_index_size() * gl.rendContext->sortedTriangles[p].first));
 			}
 		}
 		glcache.StencilMask(0xFF);
@@ -498,7 +496,7 @@ static void SetupModvolVBO()
 
 void DrawModVols(int first, int count)
 {
-	if (count == 0 || pvrrc.modtrig.empty())
+	if (count == 0 || gl.rendContext->modtrig.empty())
 		return;
 
 	SetupModvolVBO();
@@ -512,7 +510,7 @@ void DrawModVols(int first, int count)
 
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
-	ModifierVolumeParam* params = &pvrrc.global_param_mvo[first];
+	ModifierVolumeParam* params = &gl.rendContext->global_param_mvo[first];
 
 	int mod_base = -1;
 	int curMVMat = -1;
@@ -530,19 +528,19 @@ void DrawModVols(int first, int count)
 			if (param.mvMatrix != curMVMat)
 			{
 				curMVMat = param.mvMatrix;
-				glUniformMatrix4fv(gl.n2ModVolShader.mvMat, 1, GL_FALSE, pvrrc.matrices[curMVMat].mat);
+				glUniformMatrix4fv(gl.n2ModVolShader.mvMat, 1, GL_FALSE, gl.rendContext->matrices[curMVMat].mat);
 			}
 			if (param.projMatrix != curProjMat)
 			{
 				curProjMat = param.projMatrix;
-				glUniformMatrix4fv(gl.n2ModVolShader.projMat, 1, GL_FALSE, pvrrc.matrices[curProjMat].mat);
+				glUniformMatrix4fv(gl.n2ModVolShader.projMat, 1, GL_FALSE, gl.rendContext->matrices[curProjMat].mat);
 			}
 		}
 		else
 		{
 			glcache.UseProgram(gl.modvol_shader.program);
 		}
-		int clip_rect[4];
+		Rect clip_rect;
 		setTileClip(param.tileclip, clip_rect);
 		// TODO inside clipping
 
@@ -602,9 +600,9 @@ void DrawStrips()
 	glActiveTexture(GL_TEXTURE0);
 
 	RenderPass previous_pass = {};
-    for (int render_pass = 0; render_pass < (int)pvrrc.render_passes.size(); render_pass++)
+    for (int render_pass = 0; render_pass < (int)gl.rendContext->render_passes.size(); render_pass++)
     {
-        const RenderPass& current_pass = pvrrc.render_passes[render_pass];
+        const RenderPass& current_pass = gl.rendContext->render_passes[render_pass];
 
         DEBUG_LOG(RENDERER, "Render pass %d OP %d PT %d TR %d MV %d", render_pass + 1,
         		current_pass.op_count - previous_pass.op_count,
@@ -617,10 +615,10 @@ void DrawStrips()
 		glcache.DepthMask(GL_TRUE);
 
 		//Opaque
-		DrawList<ListType_Opaque,false>(pvrrc.global_param_op, previous_pass.op_count, current_pass.op_count - previous_pass.op_count);
+		DrawList<ListType_Opaque,false>(gl.rendContext->global_param_op, previous_pass.op_count, current_pass.op_count - previous_pass.op_count);
 
 		//Alpha tested
-		DrawList<ListType_Punch_Through,false>(pvrrc.global_param_pt, previous_pass.pt_count, current_pass.pt_count - previous_pass.pt_count);
+		DrawList<ListType_Punch_Through,false>(gl.rendContext->global_param_pt, previous_pass.pt_count, current_pass.pt_count - previous_pass.pt_count);
 
 		// Modifier volumes
 		if (config::ModifierVolumes)
@@ -631,12 +629,12 @@ void DrawStrips()
 			if (current_pass.autosort)
             {
 				if (!config::PerStripSorting)
-					drawSorted(previous_pass.sorted_tr_count, current_pass.sorted_tr_count - previous_pass.sorted_tr_count, render_pass < (int)pvrrc.render_passes.size() - 1);
+					drawSorted(previous_pass.sorted_tr_count, current_pass.sorted_tr_count - previous_pass.sorted_tr_count, render_pass < (int)gl.rendContext->render_passes.size() - 1);
 				else
-					DrawList<ListType_Translucent,true>(pvrrc.global_param_tr, previous_pass.tr_count, current_pass.tr_count - previous_pass.tr_count);
+					DrawList<ListType_Translucent,true>(gl.rendContext->global_param_tr, previous_pass.tr_count, current_pass.tr_count - previous_pass.tr_count);
             }
 			else
-				DrawList<ListType_Translucent,false>(pvrrc.global_param_tr, previous_pass.tr_count, current_pass.tr_count - previous_pass.tr_count);
+				DrawList<ListType_Translucent,false>(gl.rendContext->global_param_tr, previous_pass.tr_count, current_pass.tr_count - previous_pass.tr_count);
 		}
 		previous_pass = current_pass;
 	}
@@ -644,6 +642,7 @@ void DrawStrips()
 
 void OpenGLRenderer::RenderFramebuffer(const FramebufferInfo& info)
 {
+	gl.rendContext = nullptr;
 	glReadFramebuffer(info);
 	saveCurrentFramebuffer();
 	initVideoRoutingFrameBuffer();
@@ -696,20 +695,16 @@ void OpenGLRenderer::RenderFramebuffer(const FramebufferInfo& info)
 
 void writeFramebufferToVRAM()
 {
-	u32 width = (pvrrc.ta_GLOB_TILE_CLIP.tile_x_num + 1) * 32;
-	u32 height = (pvrrc.ta_GLOB_TILE_CLIP.tile_y_num + 1) * 32;
+	u32 width = gl.rendContext->globClip.x;
+	u32 height = gl.rendContext->globClip.y;
+	glm::ivec2 scaledSize;
+	Rect finalClip;
+	getWriteFBToVramParams(*gl.rendContext, scaledSize, finalClip);
 
-	float xscale = pvrrc.scaler_ctl.hscale == 1 ? 0.5f : 1.f;
-	float yscale = 1024.f / pvrrc.scaler_ctl.vscalefactor;
-	if (std::abs(yscale - 1.f) < 0.01)
-		yscale = 1.f;
-	FB_X_CLIP_type xClip = pvrrc.fb_X_CLIP;
-	FB_Y_CLIP_type yClip = pvrrc.fb_Y_CLIP;
-
-	if (xscale != 1.f || yscale != 1.f)
+	if (scaledSize.x != (int)width || scaledSize.y != (int)height)
 	{
-		u32 scaledW = width * xscale;
-		u32 scaledH = height * yscale;
+		const u32 scaledW = scaledSize.x;
+		const u32 scaledH = scaledSize.y;
 
 		if (gl.fbscaling.framebuffer != nullptr
 				&& (gl.fbscaling.framebuffer->getWidth() != (int)scaledW || gl.fbscaling.framebuffer->getHeight() != (int)scaledH))
@@ -745,16 +740,11 @@ void writeFramebufferToVRAM()
 
 		width = scaledW;
 		height = scaledH;
-		// FB_Y_CLIP is applied before vscalefactor if > 1, so it must be scaled here
-		if (yscale > 1) {
-			yClip.min = std::round(yClip.min * yscale);
-			yClip.max = std::round(yClip.max * yscale);
-		}
 	}
-	u32 tex_addr = pvrrc.fb_W_SOF1 & VRAM_MASK; // TODO SCALER_CTL.interlace, SCALER_CTL.fieldselect
+	u32 tex_addr = gl.rendContext->fb_W_SOF1 & VRAM_MASK; // TODO SCALER_CTL.interlace, SCALER_CTL.fieldselect
 
 	glPixelStorei(GL_PACK_ALIGNMENT, 1);
-	u32 linestride = pvrrc.fb_W_LINESTRIDE * 8;
+	u32 linestride = gl.rendContext->fb_W_LINESTRIDE * 8;
 
 	PixelBuffer<u32> tmp_buf;
 	tmp_buf.init(width, height);
@@ -762,11 +752,7 @@ void writeFramebufferToVRAM()
 	u8 *p = (u8 *)tmp_buf.data();
 	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, p);
 
-	xClip.min = std::min(xClip.min, width - 1);
-	xClip.max = std::min(xClip.max, width - 1);
-	yClip.min = std::min(yClip.min, height - 1);
-	yClip.max = std::min(yClip.max, height - 1);
-	WriteFramebuffer(width, height, p, tex_addr, pvrrc.fb_W_CTRL, linestride, xClip, yClip);
+	WriteFramebuffer(width, height, p, tex_addr, gl.rendContext->fb_W_CTRL, linestride, finalClip);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, gl.ofbo.origFbo);
 	glCheck();
@@ -777,17 +763,11 @@ bool OpenGLRenderer::renderLastFrame()
 	GlFramebuffer *framebuffer = gl.ofbo2.ready ? gl.ofbo2.framebuffer.get() : gl.ofbo.framebuffer.get();
 	if (framebuffer == nullptr)
 		return false;
-
-	glcache.Disable(GL_SCISSOR_TEST);
-	float screenAR = (float)settings.display.width / settings.display.height;
-	float renderAR = gl.ofbo.aspectRatio;
-
+	
 	int dx = 0;
 	int dy = 0;
-	if (renderAR > screenAR)
-		dy = (int)roundf(settings.display.height * (1 - screenAR / renderAR) / 2.f);
-	else
-		dx = (int)roundf(settings.display.width * (1 - renderAR / screenAR) / 2.f);
+	glcache.Disable(GL_SCISSOR_TEST);
+	getWindowboxDimensions(settings.display.width, settings.display.height, gl.ofbo.aspectRatio, dx, dy, config::Rotate90);
 
 	if (gl.bogusBlitFramebuffer || config::Rotate90)
 	{
@@ -795,8 +775,8 @@ bool OpenGLRenderer::renderLastFrame()
 		glBindFramebuffer(GL_FRAMEBUFFER, gl.ofbo.origFbo);
 		glcache.ClearColor(VO_BORDER_COL.red(), VO_BORDER_COL.green(), VO_BORDER_COL.blue(), 1.f);
 		glClear(GL_COLOR_BUFFER_BIT);
-		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, config::TextureFiltering == 1 ? GL_NEAREST : GL_LINEAR);
-		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, config::TextureFiltering == 1 ? GL_NEAREST : GL_LINEAR);
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, config::LinearInterpolation ? GL_LINEAR : GL_NEAREST);
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, config::LinearInterpolation ? GL_LINEAR : GL_NEAREST);
 		float *vertices = nullptr;
 		if (gl.ofbo.shiftX != 0 || gl.ofbo.shiftY != 0)
 		{
@@ -824,7 +804,7 @@ bool OpenGLRenderer::renderLastFrame()
 		glClear(GL_COLOR_BUFFER_BIT);
 		glBlitFramebuffer(-gl.ofbo.shiftX, -gl.ofbo.shiftY, framebuffer->getWidth() - gl.ofbo.shiftX, framebuffer->getHeight() - gl.ofbo.shiftY,
 				dx, settings.display.height - dy, settings.display.width - dx, dy,
-				GL_COLOR_BUFFER_BIT, config::TextureFiltering == 1 ? GL_NEAREST : GL_LINEAR);
+				GL_COLOR_BUFFER_BIT, config::LinearInterpolation ? GL_LINEAR : GL_NEAREST);
     	glBindFramebuffer(GL_FRAMEBUFFER, gl.ofbo.origFbo);
 #endif
 	}

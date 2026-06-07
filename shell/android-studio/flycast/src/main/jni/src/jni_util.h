@@ -18,7 +18,16 @@
 */
 #pragma once
 #include "types.h"
+#include <vector>
+#include <string>
 #include <jni.h>
+
+#ifndef JNIEXPORT
+#define JNIEXPORT
+#endif
+#ifndef JNICALL
+#define JNICALL
+#endif
 
 extern JavaVM* g_jvm;
 
@@ -111,7 +120,7 @@ public:
 
 	template<typename T>
 	T globalRef() {
-		return T(env()->NewGlobalRef(object), true, true);
+		return T(static_cast<typename T::jtype>(env()->NewGlobalRef(object)), true, true);
 	}
 
 protected:
@@ -136,9 +145,15 @@ private:
 class Class : public Object
 {
 public:
+	using jtype = jclass;
+
 	Class(jclass clazz = nullptr, bool ownRef = true, bool globalRef = false)
 		: Object(clazz, ownRef, globalRef) {}
 	Class(Class &&other) : Object(std::move(other)) {}
+
+	Class& operator=(const Class& other) {
+		return (Class&)Object::operator=(other);
+	}
 
 	operator jclass() const { return (jclass)object; }
 };
@@ -174,10 +189,42 @@ public:
 	{
 		if (object == nullptr)
 			return "";
-		const char *s = env()->GetStringUTFChars((jstring)object, 0);
-		std::string str(s);
-		env()->ReleaseStringUTFChars((jstring)object, s);
-		return str;
+		jstring jstr = (jstring)object;
+		jsize length = env()->GetStringLength(jstr);
+		const jchar* chars = env()->GetStringChars(jstr, nullptr);
+		if (chars == nullptr)
+			return "";
+
+		std::string result;
+		result.reserve(length); // Minimum possible length
+		for (jsize i = 0; i < length; ++i) {
+			uint32_t cp = chars[i];
+			if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < length) {
+				uint32_t low = chars[i + 1];
+				if (low >= 0xDC00 && low <= 0xDFFF) {
+					cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+					i++;
+				}
+			}
+			if (cp <= 0x7F) {
+				result += (char)cp;
+			} else if (cp <= 0x7FF) {
+				result += (char)(0xC0 | (cp >> 6));
+				result += (char)(0x80 | (cp & 0x3F));
+			} else if (cp <= 0xFFFF) {
+				result += (char)(0xE0 | (cp >> 12));
+				result += (char)(0x80 | ((cp >> 6) & 0x3F));
+				result += (char)(0x80 | (cp & 0x3F));
+			} else {
+				result += (char)(0xF0 | (cp >> 18));
+				result += (char)(0x80 | ((cp >> 12) & 0x3F));
+				result += (char)(0x80 | ((cp >> 6) & 0x3F));
+				result += (char)(0x80 | (cp & 0x3F));
+			}
+		}
+
+		env()->ReleaseStringChars(jstr, chars);
+		return result;
 	}
 
 	size_t size() const {

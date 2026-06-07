@@ -4,6 +4,7 @@
 #include "oslib/oslib.h"
 #include "serialize.h"
 #include "oslib/storage.h"
+#include "oslib/i18n.h"
 
 #include <chrono>
 #include <cstring>
@@ -12,7 +13,9 @@
 #include <vector>
 
 #ifdef _WIN32
-	#include <algorithm>
+#include <algorithm>
+#elif defined(__ANDROID__)
+#include <unistd.h>
 #endif
 
 static std::string user_config_dir;
@@ -27,24 +30,41 @@ bool file_exists(const std::string& filename)
 	return (flycast::access(filename.c_str(), R_OK) == 0);
 }
 
+static void appendPathSep(std::string& str)
+{
+#ifdef _WIN32
+	if (str.empty() || (str.back() != '/' && str.back() != '\\'))
+		str += '\\';
+#else
+	if (str.empty() || str.back() != '/')
+		str += '/';
+#endif
+}
+
 void set_user_config_dir(const std::string& dir)
 {
 	user_config_dir = dir;
+	appendPathSep(user_config_dir);
 }
 
 void set_user_data_dir(const std::string& dir)
 {
 	user_data_dir = dir;
+	appendPathSep(user_data_dir);
 }
 
 void add_system_config_dir(const std::string& dir)
 {
-	system_config_dirs.push_back(dir);
+	std::string s(dir);
+	appendPathSep(s);
+	system_config_dirs.push_back(s);
 }
 
 void add_system_data_dir(const std::string& dir)
 {
-	system_data_dirs.push_back(dir);
+	std::string s(dir);
+	appendPathSep(s);
+	system_data_dirs.push_back(s);
 }
 
 std::string get_writable_config_path(const std::string& filename)
@@ -188,6 +208,10 @@ void cResetEvent::Wait()
     state = false;
 }
 
+#if defined(__ANDROID__) && (HOST_CPU == CPU_ARM64 || HOST_CPU == CPU_X64)
+const unsigned long PAGE_SIZE = (unsigned long)sysconf(_SC_PAGESIZE);
+#endif
+
 void RamRegion::serialize(Serializer &ser) const {
 	ser.serialize(data, size);
 }
@@ -233,7 +257,10 @@ std::string timeToISO8601(time_t time)
 	tm t;
 	if (localtime_r(&time, &t) == nullptr)
 		return {};
-	std::string s(32, '\0');
-	s.resize(snprintf(s.data(), 32, "%04d/%02d/%02d %02d:%02d:%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec));
-	return s;
+	return strprintf("%04d/%02d/%02d %02d:%02d:%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
 }
+
+std::string timeToShortDateTimeString(time_t time) {
+	return i18n::formatShortDateTime(time);
+}
+

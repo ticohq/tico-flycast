@@ -25,6 +25,7 @@
 #include "hw/bba/bba.h"
 #include "cfg/option.h"
 #include "stdclass.h"
+#include "oslib/i18n.h"
 #ifndef LIBRETRO
 #include "cfg/cfg.h"
 #endif
@@ -55,23 +56,22 @@ public:
 	void receiveEthFrame(const u8 *frame, u32 size) override;
 };
 
-template<typename SocketT>
 class PPPSocket
 {
 public:
-	PPPSocket(asio::io_context& io_context, const typename SocketT::endpoint_type& endpoint,
+	PPPSocket(asio::io_context& io_context, const asio::ip::tcp::endpoint& endpoint,
 			const std::string& endpointName = "")
 		: socket(io_context)
 	{
 		asio::error_code ec;
 		socket.connect(endpoint, ec);
 		if (ec)
-			throw FlycastException(ec.message().c_str());
-		os_notify("Connected to DCNet with modem", 5000, endpointName.c_str());
+			throw FlycastException(ec.message());
+		os_notify(i18n::T("Connected to DCNet with modem"), 5000, endpointName.c_str());
 		receive();
 	}
 
-	~PPPSocket() {
+	virtual ~PPPSocket() {
 		if (dumpfp != nullptr)
 			fclose(dumpfp);
 	}
@@ -86,15 +86,15 @@ public:
 		doSend();
 	}
 
-private:
-	void receive()
+protected:
+	virtual void receive()
 	{
 		socket.async_read_some(asio::buffer(recvBuffer),
 			[this](const std::error_code& ec, size_t len)
 			{
 				if (ec || len == 0)
 				{
-					if (ec)
+					if (ec && ec != asio::error::eof)
 						ERROR_LOG(NETWORK, "Receive error: %s", ec.message().c_str());
 					close();
 					return;
@@ -172,7 +172,7 @@ private:
 #endif
 	}
 
-	SocketT socket;
+	asio::ip::tcp::socket socket;
 	std::array<u8, 1542> recvBuffer;
 	std::array<u8, 1542> sendBuffer;
 	u32 sendBufSize = 0;
@@ -182,7 +182,55 @@ private:
 	u64 dump_last_time_ms;
 };
 
-using PPPTcpSocket = PPPSocket<asio::ip::tcp::socket>;
+class PowerSmashPPPSocket : public PPPSocket
+{
+public:
+	PowerSmashPPPSocket(asio::io_context& io_context, const asio::ip::tcp::endpoint& endpoint,
+			const std::string& endpointName = "")
+		: PPPSocket(io_context, endpoint, endpointName) {}
+
+private:
+	void receive() override
+	{
+		socket.async_read_some(asio::buffer(&recvBuffer[recvBufSize], recvBuffer.size() - recvBufSize),
+			[this](const std::error_code& ec, size_t len)
+			{
+				if (ec || len == 0)
+				{
+					if (ec)
+						ERROR_LOG(NETWORK, "Receive error: %s", ec.message().c_str());
+					close();
+					return;
+				}
+				recvBufSize += len;
+				while (recvBufSize != 0)
+				{
+					u32 frameSize = 0;
+					for (u32 i = 1; i < recvBufSize; i++)
+					{
+						if (recvBuffer[i] == '~') {
+							frameSize = i + 1;
+							break;
+						}
+					}
+					if (frameSize == 0)
+						break;
+					pppdump(recvBuffer.data(), frameSize, false);
+					// Power Smash requires both start and end Flag Sequences
+					if (recvBuffer[0] != '~')
+						toModem.push('~');
+					for (size_t i = 0; i < frameSize; i++)
+						toModem.push(recvBuffer[i]);
+					recvBufSize -= frameSize;
+					if (recvBufSize != 0)
+						memmove(&recvBuffer[0], &recvBuffer[frameSize], recvBufSize);
+				}
+				receive();
+			});
+	}
+
+	u32 recvBufSize = 0;
+};
 
 class EthSocket
 {
@@ -194,8 +242,8 @@ public:
 		asio::error_code ec;
 		socket.connect(endpoint, ec);
 		if (ec)
-			throw FlycastException(ec.message().c_str());
-		os_notify("Connected to DCNet with Ethernet", 5000, endpointName.c_str());
+			throw FlycastException(ec.message());
+		os_notify(i18n::T("Connected to DCNet with Ethernet"), 5000, endpointName.c_str());
 		receive();
 		u8 prolog[] = { 'D', 'C', 'N', 'E', 'T', 1 };
 		send(prolog, sizeof(prolog));
@@ -209,7 +257,7 @@ public:
 	void send(const u8 *frame, u32 size)
 	{
 		if (sendBufferIdx + size >= sendBuffer.size()) {
-			WARN_LOG(NETWORK, "Dropped out frame (buffer:%d + %d bytes). Increase send buffer size\n", sendBufferIdx, size);
+			WARN_LOG(NETWORK, "Dropped out frame (buffer:%d + %d bytes). Increase send buffer size", sendBufferIdx, size);
 			return;
 		}
 		if (size >= 32) // skip prolog
@@ -486,10 +534,10 @@ private:
 					{
 						ap.ping += ping;
 						ap.count++;
-						if (ap.count < 3)
+						if (ap.count < 5)
 							sendPing(ap.endpoint);
 						else
-							// we have 3 answers from one AP so let's stop here
+							// we have 5 answers from one AP so let's stop here
 							finish();
 						return;
 					}
@@ -520,7 +568,7 @@ private:
 					continue;
 				}
 				const int ping = ap.ping / ap.count;
-				INFO_LOG(NETWORK, "AP %s (%s): ping %d ms", ap.name.c_str(), ap.endpoint.address().to_string().c_str(), ping);
+				INFO_LOG(NETWORK, "AP %s (%s): ping %d ms (%d pings)", ap.name.c_str(), ap.endpoint.address().to_string().c_str(), ping, ap.count);
 				if (ping < bestPing) {
 					bestPing = ping;
 					bestAP = &ap;
@@ -577,7 +625,7 @@ public:
 		pppSocket.reset();
 		ethSocket.reset();
 		io_context.reset();
-		os_notify("DCNet disconnected", 3000);
+		os_notify(i18n::T("DCNet disconnected"), 3000);
 	}
 
 	void sendModem(u8 v)
@@ -609,11 +657,12 @@ private:
 
 	std::thread thread;
 	std::unique_ptr<asio::io_context> io_context;
-	std::unique_ptr<PPPTcpSocket> pppSocket;
+	std::unique_ptr<PPPSocket> pppSocket;
 	std::unique_ptr<EthSocket> ethSocket;
 
 	static constexpr uint16_t PPP_PORT = 7654;
 	static constexpr uint16_t TAP_PORT = 7655;
+	static constexpr uint16_t POWER_SMASH_PPP_PORT = 7656;
 	friend DCNetService;
 };
 static DCNetThread thread;
@@ -679,16 +728,21 @@ void DCNetService::receiveEthFrame(u8 const *frame, unsigned int len)
 
 void DCNetThread::connect(const asio::ip::address& address, const std::string& apname)
 {
+	const bool powerSmash = settings.content.gameId == "HDR-0113"	// Power Smash
+			|| settings.content.gameId == "HDR-0091"				// Pro Yakyuu Team de Asobou Net!
+			|| settings.content.gameId == "HDR-0040";				// Virtual-On Oratorio Tangram
 	asio::ip::tcp::endpoint endpoint;
 	if (address.is_unspecified())
 	{
 		std::string hostname = "dcnet.flyca.st";
 #ifndef LIBRETRO
-		hostname = cfgLoadStr("network", "DCNetServer", hostname);
+		hostname = config::loadStr("network", "DCNetServer", hostname);
 #endif
 		std::string port;
 		if (config::EmulateBBA)
 			port = std::to_string(TAP_PORT);
+		else if (powerSmash)
+			port = std::to_string(POWER_SMASH_PPP_PORT);
 		else
 			port = std::to_string(PPP_PORT);
 		asio::ip::tcp::resolver resolver(*io_context);
@@ -697,17 +751,25 @@ void DCNetThread::connect(const asio::ip::address& address, const std::string& a
 		if (ec)
 			throw FlycastException(ec.message());
 		if (it.empty())
-			throw FlycastException("Host not found");
+			throw FlycastException(i18n::Ts("Host not found"));
 		endpoint = *it.begin();
 	}
-	else {
+	else
+	{
 		endpoint.address(address);
-		endpoint.port(config::EmulateBBA ? TAP_PORT : PPP_PORT);
+		if (config::EmulateBBA)
+			endpoint.port(TAP_PORT);
+		else if (powerSmash)
+			endpoint.port(POWER_SMASH_PPP_PORT);
+		else
+			endpoint.port(PPP_PORT);
 	}
 	if (config::EmulateBBA)
 		ethSocket = std::make_unique<EthSocket>(*io_context, endpoint, apname);
+	else if (powerSmash)
+		pppSocket = std::make_unique<PowerSmashPPPSocket>(*io_context, endpoint, apname);
 	else
-		pppSocket = std::make_unique<PPPTcpSocket>(*io_context, endpoint, apname);
+		pppSocket = std::make_unique<PPPSocket>(*io_context, endpoint, apname);
 }
 
 void DCNetThread::run()
@@ -716,9 +778,9 @@ void DCNetThread::run()
 	try {
 		std::string hostname;
 #ifndef LIBRETRO
-		hostname = cfgLoadStr("network", "DCNetServer", "");
+		hostname = config::loadStr("network", "DCNetServer");
 		if (!hostname.empty())
-			connect();
+			connect({}, hostname);
 #endif
 		AccessPointFinder finder(*io_context);
 		if (hostname.empty())
@@ -733,7 +795,7 @@ void DCNetThread::run()
 		io_context->run();
 	} catch (const FlycastException& e) {
 		ERROR_LOG(NETWORK, "DCNet connection error: %s", e.what());
-		os_notify("Can't connect to DCNet", 8000, e.what());
+		os_notify(i18n::T("Can't connect to DCNet"), 8000, e.what());
 	} catch (const std::runtime_error& e) {
 		ERROR_LOG(NETWORK, "DCNetThread::run error: %s", e.what());
 	}

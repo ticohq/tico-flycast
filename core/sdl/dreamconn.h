@@ -17,68 +17,25 @@
     along with Flycast.  If not, see <https://www.gnu.org/licenses/>.
  */
 #pragma once
+
+#ifdef USE_DREAMLINK_DEVICES
+
+#if defined(_WIN32) && !defined(TARGET_UWP)
+#define USE_DREAMCONN 1
+
 #include "dreamlink.h"
 
-#ifdef USE_DREAMCASTCONTROLLER
-
-#include <asio.hpp>
-#include <mutex>
-
-class DreamConn : public DreamLink
+class DreamConnGamepad : public DreamLinkGamepad
 {
-	//! Base port of communication to DreamConn
-	static constexpr u16 BASE_PORT = 37393;
-
-	int bus = -1;
-	bool maple_io_connected = false;
-	u8 expansionDevs = 0;
-	asio::ip::tcp::iostream iostream;
-	std::mutex send_mutex;
-
 public:
+	DreamConnGamepad(int maple_port, int joystick_idx, SDL_Joystick* sdl_joystick);
+
+	static bool identify(int deviceIndex);
+
+private:
 	//! DreamConn VID:4457 PID:4443
 	static constexpr const char* VID_PID_GUID = "5744000043440000";
-
-public:
-	DreamConn(int bus);
-
-	~DreamConn();
-
-	bool send(const MapleMsg& msg) override;
-
-    bool send(const MapleMsg& txMsg, MapleMsg& rxMsg) override;
-
-	int getBus() const override {
-		return bus;
-	}
-
-    u32 getFunctionCode(int forPort) const override {
-		if (forPort == 1 && hasVmu()) {
-			return 0x0E000000;
-		}
-		else if (forPort == 2 && hasRumble()) {
-			return 0x00010000;
-		}
-		return 0;
-	}
-
-	bool hasVmu() const {
-		return expansionDevs & 1;
-	}
-
-	bool hasRumble() const {
-		return expansionDevs & 2;
-	}
-
-	void changeBus(int newBus) override;
-
-	std::string getName() const override {
-		return "DreamConn+ / DreamConn S Controller";
-	}
-
-	void connect() override;
-
-	void disconnect() override;
 };
 
-#endif // USE_DREAMCASTCONTROLLER
+#endif // WIN32 && !UWP
+#endif // USE_DREAMLINK_DEVICES

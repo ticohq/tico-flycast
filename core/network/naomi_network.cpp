@@ -19,7 +19,10 @@
 #include "naomi_network.h"
 #include "hw/naomi/naomi_flashrom.h"
 #include "cfg/option.h"
+#include "stdclass.h"
 #include "oslib/oslib.h"
+#include "oslib/i18n.h"
+using namespace i18n;
 
 #include <chrono>
 #include <thread>
@@ -30,14 +33,6 @@ bool NaomiNetwork::init()
 {
 	if (!config::NetworkEnable)
 		return false;
-#ifdef _WIN32
-	WSADATA wsaData;
-	if (WSAStartup(MAKEWORD(2, 0), &wsaData) != 0)
-	{
-		ERROR_LOG(NETWORK, "WSAStartup failed. errno=%d", get_last_error());
-		throw Exception("WSAStartup failed");
-	}
-#endif
 	if (config::EnableUPnP)
 	{
 		miniupnp.Init();
@@ -102,8 +97,14 @@ bool NaomiNetwork::startNetwork()
 			if (networkStopping)
 				return false;
 
-			std::string notif = slaves.empty() ? "Waiting for players..."
-					: std::to_string(slaves.size()) + " player(s) connected. Waiting...";
+			std::string notif;
+			if (slaves.empty()) {
+				notif = T("Waiting for players...");
+			}
+			else {
+				notif = strprintf(translatePlural("%d player connected. Waiting...", "%d players connected. Waiting...", slaves.size()),
+						(int)slaves.size());
+			}
 			os_notify(notif.c_str(), timeout.count() * 2000);
 
 			poll();
@@ -125,12 +126,12 @@ bool NaomiNetwork::startNetwork()
 
 			nextPeer = slaves[0].addr;
 
-			os_notify("Starting game", 2000);
+			os_notify(T("Starting game"), 2000);
 			SetNaomiNetworkConfig(0);
 
 			return true;
 		}
-		os_notify("No player connected", 8000);
+		os_notify(T("No player connected"), 8000);
 	}
 	else
 	{
@@ -164,7 +165,7 @@ bool NaomiNetwork::startNetwork()
 		}
 
 		NOTICE_LOG(NETWORK, "Connecting to server");
-		os_notify("Connecting to server", 10000);
+		os_notify(T("Connecting to server"), 10000);
 		steady_clock::time_point start_time = steady_clock::now();
 
 		while (!networkStopping && !_startNow && steady_clock::now() - start_time < timeout)
@@ -248,7 +249,7 @@ bool NaomiNetwork::receive(const sockaddr_in *addr, const Packet *packet, u32 si
 			nextPeer.sin_family = AF_INET;
 			nextPeer.sin_port = packet->sync.nextNodePort;
 			nextPeer.sin_addr.s_addr = packet->sync.nextNodeIp == 0 ? addr->sin_addr.s_addr : packet->sync.nextNodeIp;
-			std::string notif = "Connected as slot " + std::to_string(slotId);
+			std::string notif = strprintf(T("Connected as slot %d"), slotId);
 			os_notify(notif.c_str(), 2000);
 		}
 		break;
@@ -327,6 +328,8 @@ void SetNaomiNetworkConfig(int node)
 	{
 		write_naomi_eeprom(0x44, node == -1 ? 0
 				: node == 0 ? 1 : 2);
+		// the game wants the region there or it resets the eeprom
+		write_naomi_eeprom(0x30, config::Region);
 	}
 	else if (gameId == "SPIKERS BATTLE JAPAN VERSION")
 	{
@@ -337,7 +340,6 @@ void SetNaomiNetworkConfig(int node)
 	{
 		write_naomi_eeprom(0x45, node == -1 ? 3
 				: node == 0 ? 0 : 1);
-		write_naomi_eeprom(0x47, node == 0 ? 0 : 1);
 	}
 	else if (gameId == "WAVE RUNNER GP")
 	{
@@ -352,7 +354,13 @@ void SetNaomiNetworkConfig(int node)
 	}
 	else if (gameId == "CLUB KART IN JAPAN" && settings.content.fileName.substr(0, 6) != "clubkp")
 	{
-		write_naomi_eeprom(0x34, node + 1); // also 03 = satellite
+		write_naomi_eeprom(0x34, node == -1 ? 0 : node == 0 ? 1 : 2); // also 03 = satellite
+		if (node != -1)
+		{
+			// car #
+			u8 b = read_naomi_eeprom(0x3d) & 0xc7;
+			write_naomi_eeprom(0x3d, b | (node << 3));
+		}
 	}
 	else if (gameId == "INITIAL D"
 			|| gameId == "INITIAL D Ver.2"
@@ -379,6 +387,9 @@ void SetNaomiNetworkConfig(int node)
 		// 0x233: cabinet type (0 deluxe, 1 twin)
 		write_naomi_flash(0x233, config::MultiboardSlaves >= 2 ? 0 : 1);
 	}
+	else if (gameId == "SEGA TETRIS") {
+		write_naomi_eeprom(0x50, node + 1);
+	}
 }
 
 bool NaomiNetworkSupported()
@@ -387,7 +398,7 @@ bool NaomiNetworkSupported()
 		"ALIEN FRONT", "MOBILE SUIT GUNDAM JAPAN", "MOBILE SUIT GUNDAM DELUXE JAPAN", " BIOHAZARD  GUN SURVIVOR2",
 		"HEAVY METAL JAPAN", "OUTTRIGGER     JAPAN", "SLASHOUT JAPAN VERSION", "SPAWN JAPAN",
 		"SPIKERS BATTLE JAPAN VERSION", "VIRTUAL-ON ORATORIO TANGRAM", "WAVE RUNNER GP", "WORLD KICKS",
-		"F355 CHALLENGE JAPAN",
+		"F355 CHALLENGE JAPAN", "SEGA TETRIS",
 		// Naomi 2
 		"CLUB KART IN JAPAN", "INITIAL D", "INITIAL D Ver.2", "INITIAL D Ver.3", "THE KING OF ROUTE66",
 		"SEGA DRIVING SIMULATOR"

@@ -151,7 +151,7 @@ void OITPipelineManager::CreatePipeline(u32 listType, bool autosort, const PolyP
 	bool twoVolume = pp.tsp1.full != (u32)-1 || pp.tcw1.full != (u32)-1;
 	bool divPosZ = !settings.platform.isNaomi2() && config::NativeDepthInterpolation;
 	vk::ShaderModule vertex_module = shaderManager->GetVertexShader(
-			OITShaderManager::VertexShaderParams{ pp.pcw.Gouraud == 1, pp.isNaomi2(), pass != Pass::Depth, twoVolume, pp.pcw.Texture == 1, divPosZ });
+			OITShaderManager::VertexShaderParams{ pp.pcw.Gouraud == 1, pp.isNaomi2(), pass != Pass::Depth, twoVolume, pp.isNaomi2() && pp.pcw.Texture == 1, divPosZ });
 	OITShaderManager::FragmentShaderParams params = {};
 	params.alphaTest = listType == ListType_Punch_Through;
 	params.bumpmap = pp.tcw.PixelFmt == PixelBumpMap;
@@ -549,4 +549,16 @@ void OITPipelineManager::CreateTrModVolPipeline(ModVolMode mode, int cullMode, b
 	trModVolPipelines[hash(mode, cullMode, naomi2)] =
 			GetContext()->GetDevice().createGraphicsPipelineUnique(GetContext()->GetPipelineCache(),
 					graphicsPipelineCreateInfo).value;
+}
+
+void OITPipelineManager::checkMaxLayers()
+{
+	int layers = std::clamp<int>(config::PerPixelLayers, 1, 256);
+	if (maxLayers != layers)
+	{
+		maxLayers = layers;
+		trModVolPipelines.clear();
+		finalPipelines[0].reset();
+		finalPipelines[1].reset();
+	}
 }

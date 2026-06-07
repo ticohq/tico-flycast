@@ -369,6 +369,7 @@ static InputDescriptors marine_fishing_inputs = {
 	  },
 };
 
+#ifdef NAOMI_MULTIBOARD
 static InputDescriptors f355_inputs = {
 	  {
 			{ NAOMI_UP_KEY, "ASSIST SC" },
@@ -400,6 +401,7 @@ static InputDescriptors f355_inputs = {
 			{ "CLUTCH", Half, 6 },	// Deluxe only
 	  },
 };
+#endif
 
 static InputDescriptors zombie_inputs = {
 	  {
@@ -413,6 +415,8 @@ static InputDescriptors zombie_inputs = {
 	  {
 			{ "UP - DOWN", Full, 1, true },
 			{ "LEFT - RIGHT", Full, 0, true },
+			{ "", Half, 4 },	// unused but P2 starts at axis 4
+			{ "", Half, 5 },	// unused but P2 starts at axis 4
 	  },
 };
 
@@ -527,6 +531,7 @@ static InputDescriptors mushik_inputs = {
 		{ NAOMI_BTN0_KEY, "HIT" },
 		{ NAOMI_BTN1_KEY, "PINCH" },
 		{ NAOMI_BTN2_KEY, "THROW" },
+		{ NAOMI_BTN3_KEY, "HIT P2", 0, NAOMI_BTN0_KEY },
 		NAO_BASE_BTN_DESC
 	},
 };
@@ -752,8 +757,8 @@ static InputDescriptors basschal_inputs = {
 
 static InputDescriptors aw_lightgun_inputs = {
 	{
-		{ AWAVE_BTN0_KEY, "TRIGGER" },
-		{ AWAVE_BTN1_KEY, "PUMP" },
+		{ AWAVE_TRIGGER_KEY, "TRIGGER" },
+		{ AWAVE_BTN0_KEY, "PUMP" },
 		AW_START_DESC
 		AW_BASE_BTN_DESC
 	},
@@ -774,6 +779,7 @@ static InputDescriptors kingrt66_inputs = {
 			{ NAOMI_BTN3_KEY, "SHIFT H", 0, NAOMI_UP_KEY },		// This button uses P2 inputs for P1
 			{ NAOMI_BTN4_KEY, "SHIFT R", 0, NAOMI_LEFT_KEY | NAOMI_DOWN_KEY },
 																// This button uses P2 inputs for P1
+			{ NAOMI_BTN5_KEY, "MIC SWITCH", NAOMI_BTN2_KEY },
 			NAO_START_DESC
 			NAO_BASE_BTN_DESC
 	},
@@ -843,6 +849,7 @@ static InputDescriptors soulsurfer_inputs = {
 	},
 };
 
+#ifdef NAOMI_MULTIBOARD
 static InputDescriptors drvsim_inputs = {
 	{
 			{ NAOMI_BTN0_KEY, "Turn R" },
@@ -884,6 +891,7 @@ static InputDescriptors drvsim_inputs = {
 			{ "Wheel", Full, 0, true },	// only read via ffb board, not jvs
 	},
 };
+#endif
 
 static InputDescriptors beachspi_inputs = INPUT_2_BUTTONS("A", "B");
 
@@ -896,6 +904,7 @@ static InputDescriptors dinok_inputs = {
 		{ DC_BTN_A, "ROCK" },
 		{ DC_BTN_B, "SCISSORS" },
 		{ DC_BTN_C, "PAPER" },
+		{ DC_BTN_X, "ROCK P2", 0, DC_BTN_A },
 		NAO_BASE_BTN_DESC
 	},
 };
@@ -918,5 +927,15 @@ static InputDescriptors tetgiant_inputs = {
 		{ DC_DPAD_RIGHT, "" },
 		{ DC_BTN_START, "" },
 		NAO_BASE_BTN_DESC
+	},
+};
+
+static InputDescriptors btlracer_inputs = {
+	{
+		{ DC_BTN_A, "BUTTON" },
+		NAO_BASE_BTN_DESC
+	},
+	{
+		{ "WHEEL", Full, 0 },
 	},
 };

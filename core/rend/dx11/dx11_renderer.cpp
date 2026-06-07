@@ -295,10 +295,10 @@ bool DX11Renderer::ensureBufferSize(ComPtr<ID3D11Buffer>& buffer, D3D11_BIND_FLA
     return SUCCEEDED(device->CreateBuffer(&desc, nullptr, &buffer.get()));
 }
 
-BaseTextureCacheData *DX11Renderer::GetTexture(TSP tsp, TCW tcw)
+BaseTextureCacheData *DX11Renderer::GetTexture(TSP tsp, TCW tcw, int area)
 {
 	//lookup texture
-	DX11Texture* tf = texCache.getTextureCacheData(tsp, tcw);
+	DX11Texture* tf = texCache.getTextureCacheData(tsp, tcw, area);
 
 	//update if needed
 	if (tf->NeedsUpdate())
@@ -318,11 +318,14 @@ BaseTextureCacheData *DX11Renderer::GetTexture(TSP tsp, TCW tcw)
 
 void DX11Renderer::Process(TA_context* ctx)
 {
+	rendContext = &ctx->rend;
 	if (resetTextureCache) {
 		texCache.Clear();
 		resetTextureCache = false;
 	}
 	texCache.Cleanup();
+	if (!ctx->rend.isRTT && ctx->rend.swapInterval > 0)
+		theDX11Context.setSwapInterval(ctx->rend.swapInterval);
 
 	ta_parse(ctx, true);
 }
@@ -350,18 +353,18 @@ void DX11Renderer::resetContextState()
 
 void DX11Renderer::configVertexShader()
 {
-	matrices.CalcMatrices(&pvrrc, width, height);
+	matrices.CalcMatrices(rendContext, rendContext->framebufferWidth, rendContext->framebufferHeight);
 	setBaseScissor();
 
-	if (pvrrc.isRTT)
+	if (rendContext->isRTT)
 	{
-		prepareRttRenderTarget(pvrrc.fb_W_SOF1 & VRAM_MASK);
+		prepareRttRenderTarget(rendContext->fb_W_SOF1 & VRAM_MASK);
 	}
 	else
 	{
 		D3D11_VIEWPORT vp{};
-		vp.Width = (FLOAT)width;
-		vp.Height = (FLOAT)height;
+		vp.Width = (FLOAT)rendContext->framebufferWidth;
+		vp.Height = (FLOAT)rendContext->framebufferHeight;
 		vp.MinDepth = 0.f;
 		vp.MaxDepth = 1.f;
 		deviceContext->RSSetViewports(1, &vp);
@@ -385,27 +388,27 @@ void DX11Renderer::configVertexShader()
 
 void DX11Renderer::uploadGeometryBuffers()
 {
-	setFirstProvokingVertex(pvrrc);
+	setFirstProvokingVertex(*rendContext);
 
-	size_t size = pvrrc.verts.size() * sizeof(decltype(*pvrrc.verts.data()));
+	size_t size = rendContext->verts.size() * sizeof(decltype(*rendContext->verts.data()));
 	bool rc = ensureBufferSize(vertexBuffer, D3D11_BIND_VERTEX_BUFFER, vertexBufferSize, size);
 	verify(rc);
 	D3D11_MAPPED_SUBRESOURCE mappedSubres;
 	deviceContext->Map(vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubres);
-	memcpy(mappedSubres.pData, pvrrc.verts.data(), size);
+	memcpy(mappedSubres.pData, rendContext->verts.data(), size);
 	deviceContext->Unmap(vertexBuffer, 0);
 
-	size = pvrrc.idx.size() * sizeof(decltype(*pvrrc.idx.data()));
+	size = rendContext->idx.size() * sizeof(decltype(*rendContext->idx.data()));
 	rc = ensureBufferSize(indexBuffer, D3D11_BIND_INDEX_BUFFER, indexBufferSize, size);
 	verify(rc);
 	deviceContext->Map(indexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubres);
-	memcpy(mappedSubres.pData, pvrrc.idx.data(), size);
+	memcpy(mappedSubres.pData, rendContext->idx.data(), size);
 	deviceContext->Unmap(indexBuffer, 0);
 
-	if (config::ModifierVolumes && !pvrrc.modtrig.empty())
+	if (config::ModifierVolumes && !rendContext->modtrig.empty())
 	{
-		const ModTriangle *data = &pvrrc.modtrig[0];
-		size = pvrrc.modtrig.size() * sizeof(decltype(pvrrc.modtrig[0]));
+		const ModTriangle *data = &rendContext->modtrig[0];
+		size = rendContext->modtrig.size() * sizeof(decltype(rendContext->modtrig[0]));
 		rc = ensureBufferSize(modvolBuffer, D3D11_BIND_VERTEX_BUFFER, modvolBufferSize, size);
 		verify(rc);
 		deviceContext->Map(modvolBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubres);
@@ -431,35 +434,33 @@ void DX11Renderer::setupPixelShaderConstants()
 	pixelConstants.shadowScale = FPU_SHAD_SCALE.scale_factor / 256.f;
 
 	// Color clamping
-	pvrrc.fog_clamp_min.getRGBAColor(pixelConstants.colorClampMin);
-	pvrrc.fog_clamp_max.getRGBAColor(pixelConstants.colorClampMax);
+	rendContext->fog_clamp_min.getRGBAColor(pixelConstants.colorClampMin);
+	rendContext->fog_clamp_max.getRGBAColor(pixelConstants.colorClampMax);
 
 	// Punch-through alpha ref
 	pixelConstants.alphaTestValue = (PT_ALPHA_REF & 0xFF) / 255.0f;
 
 	// Dithering
-	dithering = config::EmulateFramebuffer && pvrrc.fb_W_CTRL.fb_dither && pvrrc.fb_W_CTRL.fb_packmode <= 3;
+	dithering = config::EmulateFramebuffer && rendContext->fb_W_CTRL.fb_dither && rendContext->fb_W_CTRL.fb_packmode <= 3;
 	if (dithering)
 	{
-		switch (pvrrc.fb_W_CTRL.fb_packmode)
+		switch (rendContext->fb_W_CTRL.fb_packmode)
 		{
 		case 0: // 0555 KRGB 16 bit
 		case 3: // 1555 ARGB 16 bit
-			pixelConstants.ditherColorMax[0] = pixelConstants.ditherColorMax[1] = pixelConstants.ditherColorMax[2] = 31.f;
-			pixelConstants.ditherColorMax[3] = 255.f;
-			break;
+			pixelConstants.ditherDivisor[0] = pixelConstants.ditherDivisor[1] = pixelConstants.ditherDivisor[2] = 2.f;
+		break;
 		case 1: // 565 RGB 16 bit
-			pixelConstants.ditherColorMax[0] = pixelConstants.ditherColorMax[2] = 31.f;
-			pixelConstants.ditherColorMax[1] = 63.f;
-			pixelConstants.ditherColorMax[3] = 255.f;
+			pixelConstants.ditherDivisor[0] = pixelConstants.ditherDivisor[2] = 2.f;
+			pixelConstants.ditherDivisor[1] = 4.f;
 			break;
 		case 2: // 4444 ARGB 16 bit
-			pixelConstants.ditherColorMax[0] = pixelConstants.ditherColorMax[1]
-				= pixelConstants.ditherColorMax[2] = pixelConstants.ditherColorMax[3] = 15.f;
+			pixelConstants.ditherDivisor[0] = pixelConstants.ditherDivisor[1] = pixelConstants.ditherDivisor[2] = 1.f;
 			break;
 		default:
 			break;
 		}
+		pixelConstants.ditherDivisor[3] = 1.f;
 	}
 
 	D3D11_MAPPED_SUBRESOURCE mappedSubres;
@@ -473,13 +474,13 @@ void DX11Renderer::setupPixelShaderConstants()
 bool DX11Renderer::Render()
 {
 	resetContextState();
-	bool is_rtt = pvrrc.isRTT;
+	bool is_rtt = rendContext->isRTT;
 	if (!is_rtt)
 	{
-		resize(pvrrc.framebufferWidth, pvrrc.framebufferHeight);
+		resize(rendContext->framebufferWidth, rendContext->framebufferHeight);
 		deviceContext->OMSetRenderTargets(1, &fbRenderTarget.get(), depthTexView);
 		deviceContext->ClearDepthStencilView(depthTexView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 0.f, 0);
-		if (pvrrc.clearFramebuffer)
+		if (rendContext->clearFramebuffer)
 		{
 			float colors[4];
 			VO_BORDER_COL.getRGBColor(colors);
@@ -503,7 +504,7 @@ bool DX11Renderer::Render()
 
 	if (is_rtt)
 	{
-		readRttRenderTarget(pvrrc.fb_W_SOF1 & VRAM_MASK);
+		readRttRenderTarget(rendContext->fb_W_SOF1 & VRAM_MASK);
 	}
 	else if (config::EmulateFramebuffer)
 	{
@@ -561,14 +562,12 @@ void DX11Renderer::displayFramebuffer()
 		std::swap(shiftX, shiftY);
 		renderAR = 1 / renderAR;
 	}
-	float screenAR = (float)outwidth / outheight;
+	
 	int dy = 0;
 	int dx = 0;
-	if (renderAR > screenAR)
-		dy = (int)roundf(outheight * (1 - screenAR / renderAR) / 2.f);
-	else
-		dx = (int)roundf(outwidth * (1 - renderAR / screenAR) / 2.f);
-
+	// handles the rotation on its own, so never pass config::Rotate90
+	getWindowboxDimensions(outwidth, outheight, renderAR, dx, dy, false);
+	
 	float x = (float)dx;
 	float y = (float)dy;
 	float w = (float)(outwidth - 2 * dx);
@@ -583,7 +582,7 @@ void DX11Renderer::displayFramebuffer()
 	x += shiftX;
 	y += shiftY;
 	deviceContext->OMSetBlendState(blendStates.getState(false), nullptr, 0xffffffff);
-	quad->draw(fbTextureView, samplers->getSampler(config::TextureFiltering != 1), nullptr, x, y, w, h, config::Rotate90);
+	quad->draw(fbTextureView, samplers->getSampler(config::LinearInterpolation), nullptr, x, y, w, h, config::Rotate90);
 #endif
 }
 
@@ -607,11 +606,12 @@ void DX11Renderer::setCullMode(int mode)
 	deviceContext->RSSetState(rasterizer);
 }
 
-TileClipping DX11Renderer::setTileClip(u32 tileclip, int clip_rect[4])
+TileClipping DX11Renderer::setTileClip(u32 tileclip, Rect& clip_rect)
 {
-	TileClipping clipmode = GetTileClip(tileclip, matrices.GetViewportMatrix(), clip_rect);
+	TileClipping clipmode = matrices.getTileClip(tileclip, clip_rect);
 	if (clipmode == TileClipping::Outside) {
-		RECT rect { clip_rect[0], clip_rect[1], clip_rect[0] + clip_rect[2], clip_rect[1] + clip_rect[3] };
+		RECT rect { clip_rect.origin.x, clip_rect.origin.y,
+			clip_rect.origin.x + clip_rect.size.x, clip_rect.origin.y + clip_rect.size.y };
 		deviceContext->RSSetScissorRects(1, &rect);
 	}
 	else {
@@ -634,10 +634,10 @@ void DX11Renderer::setRenderState(const PolyParam *gp)
 	else
 		constants.trilinearAlpha = 1.f;
 
-	bool color_clamp = gp->tsp.ColorClamp && (pvrrc.fog_clamp_min.full != 0 || pvrrc.fog_clamp_max.full != 0xffffffff);
+	bool color_clamp = gp->tsp.ColorClamp && (rendContext->fog_clamp_min.full != 0 || rendContext->fog_clamp_max.full != 0xffffffff);
 	int fog_ctrl = config::Fog ? gp->tsp.FogCtrl : 2;
 
-	int clip_rect[4] = {};
+	Rect clip_rect;
 	TileClipping clipmode = setTileClip(gp->tileclip, clip_rect);
 	DX11Texture *texture = (DX11Texture *)gp->texture;
 	int gpuPalette = texture == nullptr || !texture->gpuPalette ? 0
@@ -679,10 +679,10 @@ void DX11Renderer::setRenderState(const PolyParam *gp)
 
 	if (clipmode == TileClipping::Inside)
 	{
-		constants.clipTest[0] = (float)clip_rect[0];
-		constants.clipTest[1] = (float)clip_rect[1];
-		constants.clipTest[2] = (float)(clip_rect[0] + clip_rect[2]);
-		constants.clipTest[3] = (float)(clip_rect[1] + clip_rect[3]);
+		constants.clipTest[0] = (float)clip_rect.origin.x;
+		constants.clipTest[1] = (float)clip_rect.origin.y;
+		constants.clipTest[2] = (float)clip_rect.bottomRight().x;
+		constants.clipTest[3] = (float)clip_rect.bottomRight().y;
 	}
 	if (constants.trilinearAlpha != 1.f || gpuPalette != 0 || clipmode == TileClipping::Inside)
 	{
@@ -736,7 +736,7 @@ void DX11Renderer::setRenderState(const PolyParam *gp)
 	deviceContext->OMSetDepthStencilState(depthStencilStates.getState(true, zwriteEnable, zfunc, config::ModifierVolumes), stencil);
 
 	if (gp->isNaomi2())
-		n2Helper.setConstants(*gp, 0, pvrrc); // poly number only used in OIT
+		n2Helper.setConstants(*gp, 0, *rendContext); // poly number only used in OIT
 }
 
 template <u32 Type, bool SortingEnabled>
@@ -774,9 +774,9 @@ void DX11Renderer::drawSorted(int first, int count, bool multipass)
 	int end = first + count;
 	for (int p = first; p < end; p++)
 	{
-		const PolyParam* params = &pvrrc.global_param_tr[pvrrc.sortedTriangles[p].polyIndex];
+		const PolyParam* params = &rendContext->global_param_tr[rendContext->sortedTriangles[p].polyIndex];
 		setRenderState<ListType_Translucent, true>(params);
-		deviceContext->DrawIndexed(pvrrc.sortedTriangles[p].count, pvrrc.sortedTriangles[p].first, 0);
+		deviceContext->DrawIndexed(rendContext->sortedTriangles[p].count, rendContext->sortedTriangles[p].first, 0);
 	}
 	if (multipass && config::TranslucentPolygonDepthMask)
 	{
@@ -808,11 +808,11 @@ void DX11Renderer::drawSorted(int first, int count, bool multipass)
 
 		for (int p = first; p < end; p++)
 		{
-			const PolyParam* params = &pvrrc.global_param_tr[pvrrc.sortedTriangles[p].polyIndex];
+			const PolyParam* params = &rendContext->global_param_tr[rendContext->sortedTriangles[p].polyIndex];
 			if (!params->isp.ZWriteDis)
 			{
 				setCullMode(params->isp.CullMode);
-				deviceContext->DrawIndexed(pvrrc.sortedTriangles[p].count, pvrrc.sortedTriangles[p].first, 0);
+				deviceContext->DrawIndexed(rendContext->sortedTriangles[p].count, rendContext->sortedTriangles[p].first, 0);
 			}
 		}
 	}
@@ -820,7 +820,7 @@ void DX11Renderer::drawSorted(int first, int count, bool multipass)
 
 void DX11Renderer::drawModVols(int first, int count)
 {
-	if (count == 0 || pvrrc.modtrig.empty() || !config::ModifierVolumes)
+	if (count == 0 || rendContext->modtrig.empty() || !config::ModifierVolumes)
 		return;
 
 	deviceContext->IASetInputLayout(modVolInputLayout);
@@ -835,7 +835,7 @@ void DX11Renderer::drawModVols(int first, int count)
 
 	setCullMode(0);
 
-	const ModifierVolumeParam *params = &pvrrc.global_param_mvo[first];
+	const ModifierVolumeParam *params = &rendContext->global_param_mvo[first];
 
 	int mod_base = -1;
 	int curMVMat = -1;
@@ -854,7 +854,7 @@ void DX11Renderer::drawModVols(int first, int count)
 		{
 			curMVMat = param.mvMatrix;
 			curProjMat = param.projMatrix;
-			n2Helper.setConstants(pvrrc.matrices[param.mvMatrix].mat, pvrrc.matrices[param.projMatrix].mat);
+			n2Helper.setConstants(rendContext->matrices[param.mvMatrix].mat, rendContext->matrices[param.projMatrix].mat);
 		}
 		deviceContext->VSSetShader(shaders->getMVVertexShader(param.isNaomi2()), nullptr, 0);
 		if (!param.isp.VolumeLast && mv_mode > 0)
@@ -864,7 +864,7 @@ void DX11Renderer::drawModVols(int first, int count)
 			// XOR'ing (closed volume)
 			deviceContext->OMSetDepthStencilState(depthStencilStates.getMVState(DepthStencilStates::Xor), 0);
 
-		int clip_rect[4] = {};
+		Rect clip_rect;
 		setTileClip(param.tileclip, clip_rect);
 		// TODO inside clipping
 
@@ -907,9 +907,9 @@ void DX11Renderer::drawModVols(int first, int count)
 void DX11Renderer::drawStrips()
 {
 	RenderPass previous_pass {};
-    for (int render_pass = 0; render_pass < (int)pvrrc.render_passes.size(); render_pass++)
+    for (int render_pass = 0; render_pass < (int)rendContext->render_passes.size(); render_pass++)
     {
-        const RenderPass& current_pass = pvrrc.render_passes[render_pass];
+        const RenderPass& current_pass = rendContext->render_passes[render_pass];
         u32 op_count = current_pass.op_count - previous_pass.op_count;
         u32 pt_count = current_pass.pt_count - previous_pass.pt_count;
         u32 tr_count = current_pass.tr_count - previous_pass.tr_count;
@@ -917,22 +917,22 @@ void DX11Renderer::drawStrips()
         DEBUG_LOG(RENDERER, "Render pass %d OP %d PT %d TR %d MV %d autosort %d", render_pass + 1,
         		op_count, pt_count, tr_count, mvo_count, current_pass.autosort);
 
-		drawList<ListType_Opaque, false>(pvrrc.global_param_op, previous_pass.op_count, op_count);
+		drawList<ListType_Opaque, false>(rendContext->global_param_op, previous_pass.op_count, op_count);
 
-		drawList<ListType_Punch_Through, false>(pvrrc.global_param_pt, previous_pass.pt_count, pt_count);
+		drawList<ListType_Punch_Through, false>(rendContext->global_param_pt, previous_pass.pt_count, pt_count);
 
 		drawModVols(previous_pass.mvo_count, mvo_count);
 
 		if (current_pass.autosort)
 		{
 			if (!config::PerStripSorting)
-				drawSorted(previous_pass.sorted_tr_count, current_pass.sorted_tr_count - previous_pass.sorted_tr_count, render_pass < (int)pvrrc.render_passes.size() - 1);
+				drawSorted(previous_pass.sorted_tr_count, current_pass.sorted_tr_count - previous_pass.sorted_tr_count, render_pass < (int)rendContext->render_passes.size() - 1);
 			else
-				drawList<ListType_Translucent, true>(pvrrc.global_param_tr, previous_pass.tr_count, tr_count);
+				drawList<ListType_Translucent, true>(rendContext->global_param_tr, previous_pass.tr_count, tr_count);
 		}
 		else
 		{
-			drawList<ListType_Translucent, false>(pvrrc.global_param_tr, previous_pass.tr_count, tr_count);
+			drawList<ListType_Translucent, false>(rendContext->global_param_tr, previous_pass.tr_count, tr_count);
 		}
 		previous_pass = current_pass;
     }
@@ -948,6 +948,7 @@ bool DX11Renderer::RenderLastFrame()
 
 void DX11Renderer::RenderFramebuffer(const FramebufferInfo& info)
 {
+	rendContext = nullptr;
 	PixelBuffer<u32> pb;
 	int width;
 	int height;
@@ -1047,99 +1048,36 @@ void DX11Renderer::RenderFramebuffer(const FramebufferInfo& info)
 
 void DX11Renderer::setBaseScissor()
 {
-	bool wide_screen_on = !pvrrc.isRTT && config::Widescreen && !matrices.IsClipped()
-			&& !config::Rotate90 && !config::EmulateFramebuffer;
-	if (!wide_screen_on)
-	{
-		float fWidth;
-		float fHeight;
-		float min_x;
-		float min_y;
-		if (!pvrrc.isRTT)
-		{
-			glm::vec4 clip_min(pvrrc.fb_X_CLIP.min, pvrrc.fb_Y_CLIP.min, 0, 1);
-			glm::vec4 clip_dim(pvrrc.fb_X_CLIP.max - pvrrc.fb_X_CLIP.min + 1,
-							   pvrrc.fb_Y_CLIP.max - pvrrc.fb_Y_CLIP.min + 1, 0, 0);
-			clip_min = matrices.GetScissorMatrix() * clip_min;
-			clip_dim = matrices.GetScissorMatrix() * clip_dim;
-
-			min_x = clip_min[0];
-			min_y = clip_min[1];
-			fWidth = clip_dim[0];
-			fHeight = clip_dim[1];
-			if (fWidth < 0)
-			{
-				min_x += fWidth;
-				fWidth = -fWidth;
-			}
-			if (fHeight < 0)
-			{
-				min_y += fHeight;
-				fHeight = -fHeight;
-			}
-			if (matrices.GetSidebarWidth() > 0)
-			{
-				float scaled_offs_x = matrices.GetSidebarWidth();
-
-				float borderColor[4];
-				VO_BORDER_COL.getRGBColor(borderColor);
-				borderColor[3] = 1.f;
-				D3D11_VIEWPORT vp{};
-				vp.MaxDepth = 1.f;
-				vp.Width = scaled_offs_x;
-				vp.Height = (float)height;
-				deviceContext->RSSetViewports(1, &vp);
-				quad->draw(whiteTextureView, samplers->getSampler(false), borderColor);
-
-				vp.TopLeftX = width - scaled_offs_x;
-				vp.Width = scaled_offs_x + 1;
-				deviceContext->RSSetViewports(1, &vp);
-				quad->draw(whiteTextureView, samplers->getSampler(false), borderColor);
-			}
-		}
-		else
-		{
-			min_x = (float)pvrrc.getFramebufferMinX();
-			min_y = (float)pvrrc.getFramebufferMinY();
-			fWidth = (float)pvrrc.getFramebufferWidth() - min_x;
-			fHeight = (float)pvrrc.getFramebufferHeight() - min_y;
-			if (config::RenderResolution > 480 && !config::RenderToTextureBuffer)
-			{
-				min_x *= config::RenderResolution / 480.f;
-				min_y *= config::RenderResolution / 480.f;
-				fWidth *= config::RenderResolution / 480.f;
-				fHeight *= config::RenderResolution / 480.f;
-			}
-		}
+	Rect scissor = matrices.getBaseScissor();
+	scissorRect.left = scissor.origin.x;
+	scissorRect.top = scissor.origin.y;
+	// DX11 scissor bottom right pixel is clipped
+	scissorRect.right = scissor.origin.x + scissor.size.x;
+	scissorRect.bottom = scissor.origin.y + scissor.size.y;
+	if (rendContext->isRTT) {
 		scissorEnable = true;
-		scissorRect.left = lroundf(min_x);
-		scissorRect.top = lroundf(min_y);
-		scissorRect.right = scissorRect.left + lroundf(fWidth);
-		scissorRect.bottom = scissorRect.top + lroundf(fHeight);
 	}
 	else
 	{
-		scissorEnable = false;
-		scissorRect.left = 0;
-		scissorRect.top = 0;
-		scissorRect.right = width;
-		scissorRect.bottom = height;
+		if (scissor.origin.x != 0 || scissor.origin.y != 0
+				|| scissor.size.x != (int)rendContext->framebufferWidth
+				|| scissor.size.y != (int)rendContext->framebufferHeight)
+			scissorEnable = true;
+		else
+			scissorEnable = false;
 	}
 	deviceContext->RSSetScissorRects(1, &scissorRect);
 }
 
 void DX11Renderer::prepareRttRenderTarget(u32 texAddress)
 {
-	u32 fbw = pvrrc.getFramebufferWidth();
-	u32 fbh = pvrrc.getFramebufferHeight();
+	u32 fbw = rendContext->framebufferWidth;
+	u32 fbh = rendContext->framebufferHeight;
 	DEBUG_LOG(RENDERER, "RTT packmode=%d stride=%d - %d x %d @ %06x",
-			pvrrc.fb_W_CTRL.fb_packmode, pvrrc.fb_W_LINESTRIDE * 8, fbw, fbh, texAddress);
-	u32 fbw2;
-	u32 fbh2;
-	getRenderToTextureDimensions(fbw, fbh, fbw2, fbh2);
+			rendContext->fb_W_CTRL.fb_packmode, rendContext->fb_W_LINESTRIDE * 8, fbw, fbh, texAddress);
 
-	createTexAndRenderTarget(rttTexture, rttRenderTarget, fbw2, fbh2);
-	createDepthTexAndView(rttDepthTex, rttDepthTexView, fbw2, fbh2);
+	createTexAndRenderTarget(rttTexture, rttRenderTarget, fbw, fbh);
+	createDepthTexAndView(rttDepthTex, rttDepthTexView, fbw, fbh);
 	deviceContext->ClearDepthStencilView(rttDepthTexView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 0.f, 0);
 	deviceContext->OMSetRenderTargets(1, &rttRenderTarget.get(), rttDepthTexView);
 
@@ -1149,13 +1087,13 @@ void DX11Renderer::prepareRttRenderTarget(u32 texAddress)
 	vp.MinDepth = 0.f;
 	vp.MaxDepth = 1.f;
 	deviceContext->RSSetViewports(1, &vp);
-	setRTTSize(fbw2, fbh2);
+	setRTTSize(fbw, fbh);
 }
 
 void DX11Renderer::readRttRenderTarget(u32 texAddress)
 {
-	u32 w = pvrrc.getFramebufferWidth();
-	u32 h = pvrrc.getFramebufferHeight();
+	u32 w = rendContext->framebufferWidth;
+	u32 h = rendContext->framebufferHeight;
 	if (config::RenderToTextureBuffer)
 	{
 		D3D11_TEXTURE2D_DESC desc;
@@ -1185,8 +1123,9 @@ void DX11Renderer::readRttRenderTarget(u32 texAddress)
 			WARN_LOG(RENDERER, "Failed to map staging RTT texture");
 			return;
 		}
-		if (w * sizeof(u32) == mappedSubres.RowPitch)
+		if (w * sizeof(u32) == mappedSubres.RowPitch) {
 			memcpy(p, mappedSubres.pData, w * h * sizeof(u32));
+		}
 		else
 		{
 			u8 *src = (u8 *)mappedSubres.pData;
@@ -1200,14 +1139,16 @@ void DX11Renderer::readRttRenderTarget(u32 texAddress)
 		deviceContext->Unmap(stagingTex, 0);
 
 		u16 *dst = (u16 *)&vram[texAddress];
-		WriteTextureToVRam<2, 1, 0, 3>(w, h, (u8 *)tmp_buf.data(), dst, pvrrc.fb_W_CTRL, pvrrc.fb_W_LINESTRIDE * 8);
+		WriteTextureToVRam<2, 1, 0, 3>(w, h, (u8 *)tmp_buf.data(), dst, rendContext->fb_W_CTRL, rendContext->fb_W_LINESTRIDE * 8, rendContext->fbClip);
 	}
 	else
 	{
 		//memset(&vram[gl.rtt.texAddress], 0, size);
-		if (w <= 1024 && h <= 1024)
+		int wpo2, hpo2;
+		getPvrFramebufferSize(*rendContext, wpo2, hpo2);
+		if (wpo2 <= 1024 && hpo2 <= 1024)
 		{
-			DX11Texture* texture = texCache.getRTTexture(texAddress, pvrrc.fb_W_CTRL.fb_packmode, w, h);
+			DX11Texture* texture = texCache.getRTTexture(texAddress, rendContext->fb_W_CTRL.fb_packmode, wpo2, hpo2);
 
 			texture->texture = rttTexture;
 			rttTexture.reset();
@@ -1263,22 +1204,18 @@ void DX11Renderer::drawOSD()
 
 void DX11Renderer::writeFramebufferToVRAM()
 {
-	u32 width = (pvrrc.ta_GLOB_TILE_CLIP.tile_x_num + 1) * 32;
-	u32 height = (pvrrc.ta_GLOB_TILE_CLIP.tile_y_num + 1) * 32;
-
-	float xscale = pvrrc.scaler_ctl.hscale == 1 ? 0.5f : 1.f;
-	float yscale = 1024.f / pvrrc.scaler_ctl.vscalefactor;
-	if (std::abs(yscale - 1.f) < 0.01)
-		yscale = 1.f;
+	u32 width = rendContext->globClip.x;
+	u32 height = rendContext->globClip.y;
+	glm::ivec2 scaledSize;
+	Rect finalClip;
+	getWriteFBToVramParams(*rendContext, scaledSize, finalClip);
 
 	ComPtr<ID3D11Texture2D> fbTexture = fbTex;
-	FB_X_CLIP_type xClip = pvrrc.fb_X_CLIP;
-	FB_Y_CLIP_type yClip = pvrrc.fb_Y_CLIP;
 
-	if (xscale != 1.f || yscale != 1.f)
+	if (scaledSize.x != (int)width || scaledSize.y != (int)height)
 	{
-		u32 scaledW = width * xscale;
-		u32 scaledH = height * yscale;
+		const u32 scaledW = scaledSize.x;
+		const u32 scaledH = scaledSize.y;
 
 		if (fbScaledTexture)
 		{
@@ -1314,14 +1251,9 @@ void DX11Renderer::writeFramebufferToVRAM()
 		width = scaledW;
 		height = scaledH;
 		fbTexture = fbScaledTexture;
-		// FB_Y_CLIP is applied before vscalefactor if > 1, so it must be scaled here
-		if (yscale > 1) {
-			yClip.min = std::round(yClip.min * yscale);
-			yClip.max = std::round(yClip.max * yscale);
-		}
 	}
-	u32 texAddress = pvrrc.fb_W_SOF1 & VRAM_MASK; // TODO SCALER_CTL.interlace, SCALER_CTL.fieldselect
-	u32 linestride = pvrrc.fb_W_LINESTRIDE * 8;
+	u32 texAddress = rendContext->fb_W_SOF1 & VRAM_MASK; // TODO SCALER_CTL.interlace, SCALER_CTL.fieldselect
+	u32 linestride = rendContext->fb_W_LINESTRIDE * 8;
 
 	D3D11_TEXTURE2D_DESC desc;
 	fbTexture->GetDesc(&desc);
@@ -1364,11 +1296,7 @@ void DX11Renderer::writeFramebufferToVRAM()
 	}
 	deviceContext->Unmap(stagingTex, 0);
 
-	xClip.min = std::min(xClip.min, width - 1);
-	xClip.max = std::min(xClip.max, width - 1);
-	yClip.min = std::min(yClip.min, height - 1);
-	yClip.max = std::min(yClip.max, height - 1);
-	WriteFramebuffer<2, 1, 0, 3>(width, height, (u8 *)tmp_buf.data(), texAddress, pvrrc.fb_W_CTRL, linestride, xClip, yClip);
+	WriteFramebuffer<2, 1, 0, 3>(width, height, (u8 *)tmp_buf.data(), texAddress, rendContext->fb_W_CTRL, linestride, finalClip);
 }
 
 bool DX11Renderer::GetLastFrame(std::vector<u8>& data, int& width, int& height)

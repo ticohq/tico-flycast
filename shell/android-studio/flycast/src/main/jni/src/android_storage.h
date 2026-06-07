@@ -19,6 +19,7 @@
 #pragma once
 #include "types.h"
 #include "oslib/storage.h"
+#include "oslib/i18n.h"
 #include "jni_util.h"
 #include <jni.h>
 
@@ -49,7 +50,7 @@ public:
 		return path.substr(0, 10) == "content://";
 	}
 
-	FILE *openFile(const std::string& uri, const std::string& mode) override
+	File *openFile(const std::string& uri, const std::string& mode) override
 	{
 		jni::String juri(uri);
 		const char *amode;
@@ -74,7 +75,13 @@ public:
 			WARN_LOG(COMMON, "openFile failed: %s", e.what());
 			return nullptr;
 		}
-		return fdopen(fd, mode.c_str());
+
+		FILE *file = fdopen(fd, mode.c_str());
+
+		if (file == nullptr)
+			return nullptr;
+
+		return new StdFile(file);
 	}
 
 	std::vector<FileInfo> listContent(const std::string& uri) override
@@ -188,7 +195,7 @@ private:
 			return;
 
 		jni::env()->ExceptionClear();
-		throw StorageException("Storage access failed: " + throwable.getMessage());
+		throw StorageException(strprintf(i18n::T("Storage access failed: %s"), throwable.getMessage().c_str()));
 	}
 
 	FileInfo fromJavaFileInfo(const jni::Object& jinfo)
@@ -244,7 +251,7 @@ private:
 	void (*addStorageCallback)(bool cancelled, std::string selectedPath);
 };
 
-Storage& customStorage()
+CustomStorage& customStorage()
 {
 	static std::unique_ptr<AndroidStorage> androidStorage;
 	if (!androidStorage)
@@ -279,11 +286,13 @@ extern "C" JNIEXPORT void JNICALL Java_com_flycast_emulator_AndroidStorage_init(
 
 extern "C" JNIEXPORT void JNICALL Java_com_flycast_emulator_AndroidStorage_reloadConfig(JNIEnv *env)
 {
-	if (cfgOpen())
+	if (config::open())
 	{
 		const RenderType render = config::RendererType;
+		config::Settings::instance().reset();
 		config::Settings::instance().load(false);
 		// Make sure the renderer type doesn't change mid-flight
 		config::RendererType = render;
+		config::Settings::instance().save();
 	}
 }

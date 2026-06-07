@@ -19,6 +19,7 @@
 #pragma once
 #include "gamepad_device.h"
 #include "ui/vgamepad.h"
+#include "oslib/i18n.h"
 
 class VirtualGamepad : public GamepadDevice
 {
@@ -26,13 +27,18 @@ public:
 	VirtualGamepad(const char *api_name, int maple_port = 0)
 		: GamepadDevice(maple_port, api_name, false)
 	{
-		_name = "Virtual Gamepad";
+		refreshName();
 		_unique_id = "virtual_gamepad_uid";
 		input_mapper = std::make_shared<IdentityInputMapping>();
 		// hasAnalogStick = true; // TODO has an analog stick but input mapping isn't persisted
 
-		leftTrigger = DC_AXIS_LT;
-		rightTrigger = DC_AXIS_RT;
+		input_mapper->addTrigger(DC_AXIS_LT, false);
+		input_mapper->addTrigger(DC_AXIS_RT, false);
+	}
+
+	void refreshName() override
+	{
+		_name = i18n::Ts("Virtual Gamepad");
 	}
 
 	bool is_virtual_gamepad() override {
@@ -62,8 +68,8 @@ public:
 				gamepad_btn_input(1 << i, false);
 		buttonState = 0;
 		joystickInput(0, 0);
-		gamepad_axis_input(DC_AXIS_LT, 0);
-		gamepad_axis_input(DC_AXIS_RT, 0);
+		gamepad_axis_input(DC_AXIS_LT, -32768);
+		gamepad_axis_input(DC_AXIS_RT, -32768);
 		if (previousFastForward)
 			gamepad_btn_input(EMU_BTN_FFORWARD, false);
 		previousFastForward = false;
@@ -83,10 +89,10 @@ public:
 		if (handleButtonInput(buttonState, kcode, pressed))
 			return;
 		if (kcode == DC_AXIS_LT) {
-			gamepad_axis_input(DC_AXIS_LT, pressed ? 0x7fff : 0);
+			gamepad_axis_input(DC_AXIS_LT, pressed ? 32767 : -32768);
 		}
 		else if (kcode == DC_AXIS_RT) {
-			gamepad_axis_input(DC_AXIS_RT, pressed ? 0x7fff : 0);
+			gamepad_axis_input(DC_AXIS_RT, pressed ? 32767 : -32768);
 		}
 		else if (kcode == EMU_BTN_SRVMODE) {
 			if (pressed)
@@ -94,10 +100,13 @@ public:
 		}
 		else
 		{
-			if (pressed)
-				buttonState |= kcode;
-			else
-				buttonState &= ~kcode;
+			if (kcode <= DC_BTN_BITMAPPED_LAST)
+			{
+				if (pressed)
+					buttonState |= kcode;
+				else
+					buttonState &= ~kcode;
+			}
 			if ((kcode & (DC_DPAD_LEFT | DC_DPAD_RIGHT)) != 0
 				&& (kcode & (DC_DPAD_UP | DC_DPAD_DOWN)) != 0)
 			{
@@ -105,7 +114,10 @@ public:
 				gamepad_btn_input(kcode & (DC_DPAD_LEFT | DC_DPAD_RIGHT), pressed);
 				gamepad_btn_input(kcode & (DC_DPAD_UP | DC_DPAD_DOWN), pressed);
 			}
-			else {
+			else
+			{
+				if (kcode == EMU_BTN_FFORWARD)
+					previousFastForward = pressed;
 				gamepad_btn_input(kcode, pressed);
 			}
 		}

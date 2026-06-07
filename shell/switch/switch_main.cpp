@@ -21,8 +21,17 @@
 #include "emulator.h"
 #include "ui/mainui.h"
 #include "oslib/directory.h"
+#include "oslib/i18n.h"
 #include <vector>
 #include <string>
+
+static void warmUpSwitchExceptions()
+{
+	try {
+		throw 1;
+	} catch (...) {
+	}
+}
 
 int main(int argc, char *argv[])
 {
@@ -31,6 +40,7 @@ int main(int argc, char *argv[])
 	//appletSetFocusHandlingMode(AppletFocusHandlingMode_NoSuspend);
 
 	LogManager::Init();
+	i18n::init();
 
 	// Set directories
 	flycast::mkdir("/flycast", 0755);
@@ -44,10 +54,18 @@ int main(int argc, char *argv[])
 	add_system_data_dir("./");
 	add_system_data_dir("data/");
 
+	warmUpSwitchExceptions();
+
 	if (flycast_init(argc, argv))
 		die("Flycast initialization failed");
 
-	mainui_loop();
+	try {
+		mainui_loop();
+	} catch (const std::exception& e) {
+		ERROR_LOG(BOOT, "mainui_loop error: %s", e.what());
+	} catch (...) {
+		ERROR_LOG(BOOT, "mainui_loop unknown exception");
+	}
 
 	flycast_term();
 
@@ -65,7 +83,7 @@ namespace hostfs
 
 void saveScreenshot(const std::string& name, const std::vector<u8>& data)
 {
-	throw FlycastException("Not supported on Switch");
+	throw FlycastException(i18n::Ts("Not supported on Switch"));
 }
 
 }

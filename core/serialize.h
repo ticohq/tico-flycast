@@ -25,6 +25,12 @@
 class SerializeBase
 {
 public:
+	class Exception : public std::runtime_error
+	{
+	public:
+		Exception(const char *msg) : std::runtime_error(msg) {}
+	};
+	
 	enum Version : int32_t {
 		V16 = 811,
 		V17,
@@ -65,7 +71,11 @@ public:
 		V52,
 		V53,
 		V54,
-		Current = V54,
+		V55,
+		V56,
+		V57,
+		V58,
+		Current = V58,
 
 		Next = Current + 1,
 	};
@@ -85,12 +95,6 @@ protected:
 class Deserializer : public SerializeBase
 {
 public:
-	class Exception : public std::runtime_error
-	{
-	public:
-		Exception(const char *msg) : std::runtime_error(msg) {}
-	};
-
 	Deserializer(const void *data, size_t limit, bool rollback = false);
 
 	template<typename T>
@@ -176,6 +180,11 @@ public:
 private:
 	void doSerialize(const void *src, size_t size)
 	{
+		if (this->_size + size > limit)
+		{
+			WARN_LOG(SAVESTATE, "Serializer overflow: current %d limit %d sz %d", (int)this->_size, (int)limit, (int)size);
+			throw Exception("Serializer buffer overflow");
+		}
 		if (data != nullptr)
 		{
 			memcpy(data, src, size);

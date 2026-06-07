@@ -158,20 +158,6 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "disabled",
    },
    {
-      CORE_OPTION_NAME "_boot_to_bios",
-      "Boot to BIOS (Restart Required)",
-      NULL,
-      "Boot directly into the Dreamcast BIOS menu.",
-      NULL,
-      "system",
-      {
-         { "disabled", NULL },
-         { "enabled",  NULL },
-         { NULL, NULL },
-      },
-      "disabled",
-   },
-   {
       CORE_OPTION_NAME "_enable_dsp",
       "Enable DSP",
       NULL,
@@ -221,7 +207,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       CORE_OPTION_NAME "_emulate_bba",
       "Broadband Adapter Emulation",
       NULL,
-      "Emulate the ethernet broadband adapter instead of the modem. (Restart Required)",
+      "Emulate the Ethernet broadband adapter instead of the modem. (Restart Required)",
       NULL,
       "system",
       {
@@ -247,9 +233,9 @@ struct retro_core_option_v2_definition option_defs_us[] = {
    },
    {
       CORE_OPTION_NAME "_dcnet",
-      "Use DCNet (Experimental)",
+      "Use DCNet",
       NULL,
-      "Connect to the experimental DCNet cloud service.",
+      "Use the DCNet cloud service for Dreamcast Internet access.",
       NULL,
       "system",
       {
@@ -257,7 +243,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
          { "enabled",  NULL },
          { NULL, NULL },
       },
-      "disabled",
+      "enabled",
    },
 
    {
@@ -791,10 +777,38 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "disabled",
    },
    {
+      CORE_OPTION_NAME "_preload_custom_textures",
+      "Preload Custom Textures",
+      NULL,
+      "Preload custom textures at game start. May improve performance but increases memory usage.",
+      NULL,
+      "hacks",
+      {
+         { "disabled", NULL },
+         { "enabled",  NULL },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+   {
       CORE_OPTION_NAME "_dump_textures",
       "Dump Textures",
       NULL,
       "Every time a new texture is used by the game, it will be saved as a .png file in the 'system/dc/texdump/<game-id>/' folder.",
+      NULL,
+      "hacks",
+      {
+         { "disabled", NULL },
+         { "enabled",  NULL },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+   {
+      CORE_OPTION_NAME "_dump_replaced_textures",
+      "Dump Replaced Textures",
+      NULL,
+      "Always dump textures that are already replaced by custom textures.",
       NULL,
       "hacks",
       {
@@ -1000,6 +1014,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       {
          { "VMU",      NULL },
          { "Purupuru", "Vibration Pack" },
+         { "DreamPotato", NULL },
          { "None",     NULL },
          { NULL, NULL },
       },
@@ -1030,6 +1045,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       {
          { "VMU",      NULL },
          { "Purupuru", "Vibration Pack" },
+         { "DreamPotato", NULL },
          { "None",     NULL },
          { NULL, NULL },
       },
@@ -1060,6 +1076,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       {
          { "VMU",      NULL },
          { "Purupuru", "Vibration Pack" },
+         { "DreamPotato", NULL },
          { "None",     NULL },
          { NULL, NULL },
       },
@@ -1090,6 +1107,7 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       {
          { "VMU",      NULL },
          { "Purupuru", "Vibration Pack" },
+         { "DreamPotato", NULL },
          { "None",     NULL },
          { NULL, NULL },
       },
@@ -1130,6 +1148,19 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "Visual Memory Units/Systems (VMU) Sounds",
       "VMU Sounds",
       "When enabled, VMU beeps are played.",
+      NULL,
+      "vmu",
+      {
+         { "disabled", NULL },
+         { "enabled",   NULL },
+      },
+      "disabled",
+   },
+   {
+      CORE_OPTION_NAME "_linked_vmu_storage",
+      "DreamPotato VMU storage",
+      NULL,
+      "Enable storage of VMU data on the connected DreamPotato emulator. When enabled, the local VMU save file is not used.",
       NULL,
       "vmu",
       {

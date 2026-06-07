@@ -19,6 +19,7 @@
 #pragma once
 #include "scraper.h"
 #include "stdclass.h"
+#include "cfg/option.h"
 
 #include <future>
 #include <memory>
@@ -40,7 +41,14 @@ private:
 	void loadDatabase();
 	void saveDatabase();
 	std::string getSaveDirectory() const {
-		return get_writable_data_path("boxart/");
+		// *must* end with a path separator
+		if (!config::BoxartPath.get().empty()) {
+			std::string path = config::BoxartPath.get();
+			if (!path.empty() && path.back() != '/' && path.back() != '\\')
+				path += '/';
+			return path;
+		}
+		return get_writable_data_path("/boxart/");
 	}
 	void fetchBoxart();
 
@@ -48,6 +56,7 @@ private:
 	std::mutex mutex;
 	std::unique_ptr<Scraper> scraper;
 	std::unique_ptr<Scraper> offlineScraper;
+	std::unique_ptr<Scraper> arcadeScraper;
 	bool databaseLoaded = false;
 	bool databaseDirty = false;
 

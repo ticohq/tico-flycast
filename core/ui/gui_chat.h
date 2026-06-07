@@ -22,6 +22,7 @@
 #include "imgui.h"
 #include "imgui_compat.h"
 #include "network/ggpo.h"
+#include "oslib/i18n.h"
 #include <chrono>
 
 class Chat
@@ -43,9 +44,9 @@ class Chat
 	std::string playerName(bool remote)
 	{
 		if (remote)
-			return !remotePlayerName.empty() ? remotePlayerName : config::ActAsServer ? "P2" : "P1";
+			return !remotePlayerName.empty() ? remotePlayerName : config::ActAsServer ? i18n::T("P2") : i18n::T("P1");
 		else
-			return !localPlayerName.empty() ? localPlayerName : config::ActAsServer ? "P1" : "P2";
+			return !localPlayerName.empty() ? localPlayerName : config::ActAsServer ? i18n::T("P1") : i18n::T("P2");
 	}
 
 public:
@@ -88,7 +89,7 @@ public:
 		if (ImGui::Begin("Chat", &visible, ImGuiWindowFlags_NoScrollbar))
 		{
 			ImGui::BeginChild(ImGui::GetID("log"), ImVec2(0, -ImGui::GetStyle().ItemSpacing.x - ImGui::GetFontSize() - ImGui::GetStyle().FramePadding.x * 2),
-					ImGuiChildFlags_Border, ImGuiWindowFlags_DragScrolling);
+					ImGuiChildFlags_Borders, ImGuiWindowFlags_DragScrolling);
 			ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
 			for (const auto& p : lines)
 				ImGui::TextColored(p.first, "%s", p.second.c_str());
@@ -101,7 +102,7 @@ public:
 			ImGui::EndChild();
 			static char buf[512];
 			ImGui::SetNextItemWidth(-0.001f);
-			if (ImGui::InputText("##input", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue))
+			if (InputText("##input", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue))
 			{
 				if (buf[0] != '\0')
 				{

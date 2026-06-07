@@ -21,6 +21,7 @@
 #include "hw/sh4/modules/modules.h"
 #include "hw/maple/maple_cfg.h"
 #include "hw/maple/maple_devs.h"
+#include "oslib/i18n.h"
 #include <deque>
 #include <memory>
 #include <cerrno>
@@ -287,7 +288,7 @@ protected:
 		case CARD_EJECT:
 			NOTICE_LOG(NAOMI, "Card ejected");
 			if (cardInserted)
-				os_notify("Card ejected", 2000);
+				os_notify(i18n::T("Card ejected"), 2000);
 			cardInserted = false;
 			status1 = getStatus1();
 			break;
@@ -581,7 +582,7 @@ private:
 		case CARD_EJECT:
 			NOTICE_LOG(NAOMI, "Card ejected");
 			if (cardInserted)
-				os_notify("Card ejected", 2000);
+				os_notify(i18n::T("Card ejected"), 2000);
 			cardInserted = false;
 			break;
 		case CARD_NEW:
@@ -680,7 +681,7 @@ void term() {
 class BarcodeReader final : public SerialPort::Pipe
 {
 public:
-	BarcodeReader() {
+	BarcodeReader(char eotChar) : eotChar(eotChar) {
 		SCIFSerialPort::Instance().setPipe(this);
 	}
 
@@ -704,7 +705,7 @@ public:
 		if (toSend.size() >= 32)
 			return;
 		INFO_LOG(NAOMI, "Card read: %s", card.c_str());
-		std::string data = card + "*";
+		std::string data = card + eotChar;
 		toSend.insert(toSend.end(), (const u8 *)&data[0], (const u8 *)(&data.back() + 1));
 		SCIFSerialPort::Instance().updateStatus();
 	}
@@ -718,14 +719,19 @@ public:
 	}
 
 private:
+	const char eotChar;
 	std::deque<u8> toSend;
 	std::string card;
 };
 
 static std::unique_ptr<BarcodeReader> barcodeReader;
 
-void barcodeInit() {
-	barcodeReader = std::make_unique<BarcodeReader>();
+void barcodeInit()
+{
+	if (settings.content.gameId == "BTR 2K9 VER 1.004")	// System SP Battle Racer
+		barcodeReader = std::make_unique<BarcodeReader>('\r');
+	else
+		barcodeReader = std::make_unique<BarcodeReader>('*');
 }
 
 void barcodeTerm() {

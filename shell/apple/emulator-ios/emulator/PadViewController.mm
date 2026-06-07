@@ -45,9 +45,16 @@
 	touchToButton = [[NSMutableDictionary alloc] init];
 }
 
+- (void)dealloc
+{
+	GamepadDevice::Unregister(virtualGamepad);
+	virtualGamepad.reset();
+	[super dealloc];
+}
+
 - (void)showController:(UIView *)parentView
 {
-	if (!cfgLoadBool("help", "PauseGameTip", false))
+	if (!config::loadBool("help", "PauseGameTip", false))
 	{
 		UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Help Tip"
 								   message:@"To pause the game, press Up+Down or Left+Right on the virtual DPad."
@@ -55,7 +62,7 @@
 		[self presentViewController:alert animated:YES completion:nil];
 		UIAlertAction* defaultAction = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault
 									   handler:^(UIAlertAction * action) {
-			cfgSaveBool("help", "PauseGameTip", true);
+			config::saveBool("help", "PauseGameTip", true);
 		}];
 		[alert addAction:defaultAction];
 	}

@@ -135,6 +135,17 @@ static void add_isp_to_nvmem(DCFlashChip *flash, const char *username)
 		if (flash->WriteBlock(FLASH_PT_USER, FLASH_USER_ISP2, &isp2) != 1)
 			WARN_LOG(FLASHROM, "Failed to save ISP2 information to flash RAM");
 	}
+	flash_bba_block bba{};
+	if (!flash->ReadBlock(FLASH_PT_USER, FLASH_USER_BBA, &bba)
+			|| memcmp(bba.sega, "SEGA", 4)
+			|| bba.netmask == 0)
+	{
+		memcpy(bba.sega, "SEGA", 4);
+		bba.netmask = 0xffffff00;
+		// Leave everything else at 0 to use DHCP
+		if (flash->WriteBlock(FLASH_PT_USER, FLASH_USER_BBA, &bba) != 1)
+			WARN_LOG(FLASHROM, "Failed to save BBA information to flash RAM");
+	}
 }
 
 static void fixUpDCFlash()

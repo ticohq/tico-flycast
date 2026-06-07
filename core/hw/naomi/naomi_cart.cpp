@@ -45,6 +45,10 @@
 #include "netdimm.h"
 #include "systemsp.h"
 #include "hopper.h"
+#include "midiffb.h"
+#include "oslib/i18n.h"
+
+using namespace i18n;
 
 Cartridge *CurrentCartridge;
 bool bios_loaded = false;
@@ -141,7 +145,7 @@ static bool loadBios(const char *filename, Archive *child_archive, Archive *pare
 				// FIXME memory leak
 				naomi_default_eeprom = (u8 *)malloc(bios->blobs[romid].length);
 				if (naomi_default_eeprom == nullptr)
-					throw NaomiCartException("Memory allocation failed");
+					throw NaomiCartException(Ts("Memory allocation failed"));
 
 				u32 read = file->Read(naomi_default_eeprom, bios->blobs[romid].length);
 				for (unsigned i = 0; i < bios->blobs[romid].length; i += 2)
@@ -185,7 +189,7 @@ void naomi_cart_LoadBios(const char *filename)
 	if (settings.naomi.slave)
 	{
 		if (!loadBios(filename, nullptr, nullptr, config::Region))
-			throw NaomiCartException(std::string("Error: cannot load BIOS ") + filename);
+			throw NaomiCartException(strprintf(T("Error: cannot load BIOS %s"), filename));
 		bios_loaded = true;
 		return;
 	}
@@ -217,7 +221,7 @@ void naomi_cart_LoadBios(const char *filename)
 		{
 			// If a specific BIOS is needed for this game, fail.
 			if (game->bios != nullptr || !bios_loaded)
-				throw NaomiCartException(std::string("Error: cannot load BIOS ") + (game->bios != nullptr ? game->bios : "naomi.zip"));
+				throw NaomiCartException(strprintf(T("Error: cannot load BIOS %s"), game->bios != nullptr ? game->bios : "naomi.zip"));
 
 			// otherwise use the default BIOS
 		}
@@ -229,7 +233,7 @@ static void loadMameRom(const std::string& path, const std::string& fileName, Lo
 {
 	const Game *game = FindGame(fileName.c_str());
 	if (game == nullptr)
-		throw NaomiCartException("Unknown game");
+		throw NaomiCartException(Ts("Unknown game"));
 
 	// Open archive and parent archive if any
 	std::unique_ptr<Archive> archive(OpenArchive(path));
@@ -255,9 +259,9 @@ static void loadMameRom(const std::string& path, const std::string& fileName, Lo
 	if (archive == nullptr && parent_archive == nullptr)
 	{
 		if (game->parent_name != nullptr)
-			throw NaomiCartException(std::string("Cannot open ") + fileName + std::string(" or ") + game->parent_name);
+			throw NaomiCartException(strprintf(T("Cannot open %s or %s"), fileName.c_str(), game->parent_name));
 		else
-			throw NaomiCartException(std::string("Cannot open ") + fileName);
+			throw NaomiCartException(strprintf(T("Cannot open %s"), fileName.c_str()));
 	}
 
 	// Load the BIOS
@@ -336,7 +340,7 @@ static void loadMameRom(const std::string& path, const std::string& fileName, Lo
 				u8 *dst = (u8 *)CurrentCartridge->GetPtr(game->blobs[romid].offset, len);
 				u8 *src = (u8 *)CurrentCartridge->GetPtr(game->blobs[romid].src_offset, len);
 				if (dst == nullptr || src == nullptr)
-					throw NaomiCartException("Invalid ROM");
+					throw NaomiCartException(Ts("Invalid ROM"));
 				memcpy(dst, src, game->blobs[romid].length);
 				DEBUG_LOG(NAOMI, "Copied: %x bytes from %07x to %07x", game->blobs[romid].length, game->blobs[romid].src_offset, game->blobs[romid].offset);
 			}
@@ -357,7 +361,7 @@ static void loadMameRom(const std::string& path, const std::string& fileName, Lo
 					WARN_LOG(NAOMI, "%s: Cannot open %s", fileName.c_str(), game->blobs[romid].filename);
 					if (game->blobs[romid].blob_type != Eeprom)
 						// Default eeprom file is optional
-						throw NaomiCartException(std::string("Cannot find ") + game->blobs[romid].filename);
+						throw NaomiCartException(strprintf(T("Cannot find %s"), game->blobs[romid].filename));
 					else
 						continue;
 				}
@@ -367,7 +371,7 @@ static void loadMameRom(const std::string& path, const std::string& fileName, Lo
 						{
 							u8 *dst = (u8 *)CurrentCartridge->GetPtr(game->blobs[romid].offset, len);
 							if (dst == nullptr)
-								throw NaomiCartException(std::string("Invalid ROM: truncated ") + game->blobs[romid].filename);
+								throw NaomiCartException(strprintf(T("Invalid ROM: truncated %s"), game->blobs[romid].filename));
 							u32 read = file->Read(dst, game->blobs[romid].length);
 							if (config::GGPOEnable)
 								md5.add(dst, game->blobs[romid].length);
@@ -379,12 +383,12 @@ static void loadMameRom(const std::string& path, const std::string& fileName, Lo
 						{
 							u8 *buf = (u8 *)malloc(game->blobs[romid].length);
 							if (buf == nullptr)
-								throw NaomiCartException("Memory allocation failed");
+								throw NaomiCartException(Ts("Memory allocation failed"));
 
 							u32 read = file->Read(buf, game->blobs[romid].length);
 							u16 *to = (u16 *)CurrentCartridge->GetPtr(game->blobs[romid].offset, len);
 							if (to == nullptr)
-								throw NaomiCartException(std::string("Invalid ROM: truncated ") + game->blobs[romid].filename);
+								throw NaomiCartException(strprintf(T("Invalid ROM: truncated %s"), game->blobs[romid].filename));
 							u16 *from = (u16 *)buf;
 							for (int i = game->blobs[romid].length / 2; --i >= 0; to++)
 								*to++ = *from++;
@@ -399,7 +403,7 @@ static void loadMameRom(const std::string& path, const std::string& fileName, Lo
 						{
 							u8 *buf = (u8 *)malloc(game->blobs[romid].length);
 							if (buf == nullptr)
-								throw NaomiCartException("Memory allocation failed");
+								throw NaomiCartException(Ts("Memory allocation failed"));
 
 							u32 read = file->Read(buf, game->blobs[romid].length);
 							CurrentCartridge->SetKeyData(buf);
@@ -425,7 +429,7 @@ static void loadMameRom(const std::string& path, const std::string& fileName, Lo
 							{
 								naomi_default_eeprom = (u8 *)malloc(game->blobs[romid].length);
 								if (naomi_default_eeprom == nullptr)
-									throw NaomiCartException("Memory allocation failed");
+									throw NaomiCartException(Ts("Memory allocation failed"));
 
 								u32 read = file->Read(naomi_default_eeprom, game->blobs[romid].length);
 								if (config::GGPOEnable)
@@ -477,7 +481,7 @@ static void loadDecryptedRom(const std::string& path, const std::string& fileNam
 		if (!loadBios("naomi", NULL, NULL, -1))
 		{
 			if (!bios_loaded)
-				throw FlycastException("Error: cannot load BIOS from naomi.zip");
+				throw FlycastException(Ts("Error: cannot load BIOS from naomi.zip"));
 		}
 	}
 
@@ -491,17 +495,17 @@ static void loadDecryptedRom(const std::string& path, const std::string& fileNam
 	if (extension == "lst")
 	{
 		// LST file
-		FILE *fl = hostfs::storage().openFile(path, "r");
+		hostfs::File *fl = hostfs::storage().openFile(path, "r");
 		if (!fl)
-			throw FlycastException("Error: can't open " + path);
+			throw FlycastException(strprintf(T("Error: can't open %s"), path.c_str()));
 		folder = hostfs::storage().getParentPath(path);
 
 		char t[512];
-		char* line = std::fgets(t, sizeof(t), fl);
+		char* line = fl->gets(t, sizeof(t));
 		if (!line)
 		{
-			std::fclose(fl);
-			throw FlycastException("Error: Invalid LST file");
+			delete fl;
+			throw FlycastException(Ts("Error: Invalid LST file"));
 		}
 
 		char* eon = strstr(line, "\n");
@@ -513,11 +517,11 @@ static void loadDecryptedRom(const std::string& path, const std::string& fileNam
 			DEBUG_LOG(NAOMI, "+Loading naomi rom : %s", line);
 		}
 
-		line = std::fgets(t, sizeof(t), fl);
+		line = fl->gets(t, sizeof(t));
 		if (!line)
 		{
-			std::fclose(fl);
-			throw FlycastException("Error: Invalid LST file");
+			delete fl;
+			throw FlycastException(Ts("Error: Invalid LST file"));
 		}
 
 		while (line)
@@ -534,20 +538,20 @@ static void loadDecryptedRom(const std::string& path, const std::string& fileNam
 			else if (line[0] != 0 && line[0] != '\n' && line[0] != '\r')
 				WARN_LOG(NAOMI, "Warning: invalid line in .lst file: %s", line);
 
-			line = std::fgets(t, sizeof(t), fl);
+			line = fl->gets(t, sizeof(t));
 		}
-		std::fclose(fl);
+		delete fl;
 	}
 	else
 	{
 		// BIN loading
-		FILE* fp = hostfs::storage().openFile(path, "rb");
+		hostfs::File* fp = hostfs::storage().openFile(path, "rb");
 		if (fp == nullptr)
-			throw FlycastException("Error: can't open " + path);
+			throw FlycastException(strprintf(T("Error: can't open %s"), path.c_str()));
 
-		std::fseek(fp, 0, SEEK_END);
-		u32 file_size = (u32)std::ftell(fp);
-		std::fclose(fp);
+		fp->seek(0, SEEK_END);
+		u32 file_size = (u32)fp->tell();
+		delete fp;
 		files.emplace_back(path);
 		fstart.push_back(0);
 		fsize.push_back(file_size);
@@ -556,20 +560,20 @@ static void loadDecryptedRom(const std::string& path, const std::string& fileNam
 
 	INFO_LOG(NAOMI, "+%zd romfiles, %.2f MB set address space", files.size(), romSize / 1024.f / 1024.f);
 	if (romSize == 0)
-		throw FlycastException("Invalid empty ROM");
+		throw FlycastException(Ts("Invalid empty ROM"));
 
 	MD5Sum md5;
 
 	// Allocate space for the rom
 	u8 *romBase = (u8 *)malloc(romSize);
 	if (romBase == nullptr)
-		throw FlycastException("Out of memory");
+		throw FlycastException(Ts("Out of memory"));
 
 	bool load_error = false;
 
 	for (size_t i = 0; i<files.size(); i++)
 	{
-		FILE *fp = nullptr;
+		hostfs::File *fp = nullptr;
 
 		if (files[i] != "null")
 		{
@@ -597,10 +601,10 @@ static void loadDecryptedRom(const std::string& path, const std::string& fileNam
 		else
 		{
 			//printf("-Mapping \"%s\" at 0x%08X, size 0x%08X\n", files[i].c_str(), fstart[i], fsize[i]);
-			bool mapped = fread(romDest, 1, fsize[i], fp) == fsize[i];
+			bool mapped = fp->read(romDest, 1, fsize[i]) == fsize[i];
 			if (config::GGPOEnable)
 				md5.add(fp);
-			fclose(fp);
+			delete fp;
 			if (!mapped)
 			{
 				ERROR_LOG(NAOMI, "Unable to read file %s @ %08x size %x", files[i].c_str(),
@@ -614,7 +618,7 @@ static void loadDecryptedRom(const std::string& path, const std::string& fileNam
 	if (load_error)
 	{
 		free(romBase);
-		throw FlycastException("Error: Failed to load BIN/DAT file");
+		throw FlycastException(Ts("Error: Failed to load BIN/DAT file"));
 	}
 	if (config::GGPOEnable)
 		md5.getDigest(settings.network.md5.game);
@@ -703,7 +707,8 @@ void naomi_cart_LoadRom(const std::string& path, const std::string& fileName, Lo
 				|| gameId == "MUSHIUSA '04 1ST VER0.900-"
 				|| gameId.substr(0, 13) == "DINOSAUR KING"
 				|| gameId == "INW PUPPY 2008 VER1.001"	// SystemSP isshoni
-				|| gameId.substr(0, 14) == "LOVE AND BERRY")
+				|| gameId.substr(0, 14) == "LOVE AND BERRY"
+				|| gameId == "BTR 2K9 VER 1.004")		// SystemSP Battle Racer
 		{
 			card_reader::barcodeInit();
 		}
@@ -738,8 +743,8 @@ void naomi_cart_LoadRom(const std::string& path, const std::string& fileName, Lo
 			config::LocalPort.override(config::LocalPort + settings.naomi.drivingSimSlave);
 			if (settings.naomi.drivingSimSlave == 0)
 			{
-				int x = cfgLoadInt("window", "left", (1920 - 640) / 2);
-				int w = cfgLoadInt("window", "width", 640);
+				int x = config::loadInt("window", "left", (1920 - 640) / 2);
+				int w = config::loadInt("window", "width", 640);
 				std::string region = "config:Dreamcast.Region=" + std::to_string(config::Region);
 				for (int i = 0; i < 2; i++)
 				{
@@ -836,7 +841,7 @@ Cartridge::Cartridge(u32 size)
 {
 	RomPtr = (u8 *)malloc(size);
 	if (RomPtr == nullptr)
-		throw NaomiCartException("Memory allocation failed");
+		throw NaomiCartException(Ts("Memory allocation failed"));
 	RomSize = size;
 	if (size != 0)
 		memset(RomPtr, 0xFF, RomSize);
