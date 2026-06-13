@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <algorithm>
+#include <cctype>
 #include "TicoLogger.h"
 #include <curl/curl.h>
 #include <thread>
@@ -31,6 +32,20 @@
 // Forward declarations from imgread/common.h (full include deferred to avoid Event conflict)
 struct Disc;
 Disc* OpenDisc(const std::string& path, std::vector<unsigned char>* digest);
+
+// NAOMI/Atomiswave are detected by extension (matches flycast's libretro
+// frontend). Used to keep arcade ROMs away from the disc-only code paths.
+static bool TicoIsArcadeRom(const std::string& path)
+{
+    size_t dot = path.find_last_of('.');
+    if (dot == std::string::npos)
+        return false;
+    std::string ext = path.substr(dot);
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return ext == ".lst" || ext == ".bin" || ext == ".dat" ||
+           ext == ".zip" || ext == ".7z";
+}
 
 //==============================================================================
 // SRAM Handling
@@ -390,14 +405,22 @@ TicoCore::TicoCore()
     m_systemDir = TicoConfig::SYSTEM_PATH;
     m_saveDir = TicoConfig::SAVES_PATH;
 
-    // Default VMU settings (ensure they exist if config doesn't provide them)
-    m_configOptions["reicast_per_content_vmus"] = "enabled"; // Force per-game VMUs
-    m_configOptions["flycast_card_a1"] = "vmu_save_A1.bin";
-    m_configOptions["flycast_card_a2"] = "vmu_save_A2.bin";
-    m_configOptions["flycast_card_b1"] = "vmu_save_B1.bin";
-    m_configOptions["flycast_card_b2"] = "vmu_save_B2.bin";
+    // Per-game VMUs (overridable in flycast_settings.json). The core persists
+    // them in retro_load/unload_game, so we don't do manual SRAM handling.
+    m_configOptions["reicast_per_content_vmus"] = "All VMUs";
 
-    // Force threaded rendering so SH4 emulation runs on a separate core
+    // 4 Dreamcast controllers, each with a VMU + rumble (flycast defaults ports
+    // 2-4 to None). Ignored for arcade.
+    m_configOptions["reicast_device_port1_slot1"] = "VMU";
+    m_configOptions["reicast_device_port2_slot1"] = "VMU";
+    m_configOptions["reicast_device_port3_slot1"] = "VMU";
+    m_configOptions["reicast_device_port4_slot1"] = "VMU";
+    m_configOptions["reicast_device_port1_slot2"] = "Purupuru";
+    m_configOptions["reicast_device_port2_slot2"] = "Purupuru";
+    m_configOptions["reicast_device_port3_slot2"] = "Purupuru";
+    m_configOptions["reicast_device_port4_slot2"] = "Purupuru";
+
+    // Run SH4 on its own core.
     m_configOptions["reicast_threaded_rendering"] = "enabled";
 }
 
@@ -568,6 +591,9 @@ bool TicoCore::LoadGame(const std::string &path)
 {
     LOG_CORE("LoadGame: Enter: %s", path.c_str());
 
+    // Keyed by save states and RA hashing.
+    m_gamePath = path;
+
     if (!m_initialized)
     {
         LOG_CORE("LoadGame: Not initialized, calling Init()");
@@ -611,10 +637,13 @@ bool TicoCore::LoadGame(const std::string &path)
     LOG_CORE("  gameInfo.size = %zu", gameInfo.size);
     LOG_CORE("  gameInfo.data = %p", gameInfo.data);
 
-    // Pre-open a SEPARATE disc for RA hashing BEFORE the emulator starts.
-    // This gives us independent FILE* handles that won't conflict with
-    // the emulator's concurrent disc access on the SH4 thread.
-    if (m_raEnabled) {
+    // Pre-open a separate disc (own FILE* handles) for RA hashing before the
+    // emulator starts. Arcade ROMs have no disc -- they hash by name in
+    // RAIdentifyGame, and OpenDisc() would throw on them.
+    if (m_raEnabled && TicoIsArcadeRom(path)) {
+        m_raHashDisc = nullptr;
+    }
+    else if (m_raEnabled) {
         try {
             m_raHashDisc = (void*)OpenDisc(path, nullptr);
             LOG_CORE("RA: Pre-opened disc for hashing: %p", m_raHashDisc);
@@ -670,14 +699,14 @@ bool TicoCore::LoadGame(const std::string &path)
 
     // Set controller
     LOG_CORE("LoadGame: Setting controller port device...");
-    retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
+    for (unsigned port = 0; port < 4; ++port)
+        retro_set_controller_port_device(port, RETRO_DEVICE_JOYPAD);
 
     m_gameLoaded = true;
     m_paused = false;
     LOG_CORE("LoadGame: Complete!");
 
-    // Load SRAM
-    LoadSRAM();
+    // (VMU/flash already loaded by retro_load_game; no manual SRAM load.)
 
     // Start RetroAchievements if enabled
     if (m_rcClient && m_raEnabled && !m_raUsername.empty()) {
@@ -712,9 +741,7 @@ void TicoCore::UnloadGame()
     if (!m_gameLoaded)
         return;
 
-    // Save SRAM before unloading
-    SaveSRAM();
-
+    // (VMU/flash persisted by retro_unload_game; no manual SRAM save.)
     DestroyHWContext();
     retro_unload_game();
     m_gameLoaded = false;
@@ -1347,7 +1374,7 @@ void TicoCore::LoadConfig()
         defaultJ["reicast_device_port3_slot2"] = "Purupuru";
         defaultJ["reicast_device_port4_slot1"] = "VMU";
         defaultJ["reicast_device_port4_slot2"] = "Purupuru";
-        defaultJ["reicast_per_content_vmus"] = "disabled";
+        defaultJ["reicast_per_content_vmus"] = "All VMUs";
         defaultJ["reicast_vmu_sound"] = "disabled";
         defaultJ["reicast_show_vmu_screen_settings"] = "disabled";
         defaultJ["reicast_vmu1_screen_display"] = "disabled";
@@ -1615,7 +1642,7 @@ static Disc* s_hashDisk = nullptr;
 // We replicate that behavior here, reading directly from the track BIN file.
 
 struct TicoRATrack {
-    FILE*    file;         // The track's BIN file (from RawTrackFile)
+    hostfs::File* file;    // The track's BIN file (borrowed from RawTrackFile)
     uint32_t sector_size;  // 2352, 2048, 2336
     uint32_t header_size;  // Bytes to skip to get 2048-byte user data (16 for MODE1/2352, 24 for MODE2/2352, 0 for 2048)
     uint32_t first_sector; // LBA base computed from raw sector header MSF
@@ -1658,8 +1685,8 @@ static void* tico_cdreader_open_track(const char* path, uint32_t track) {
         // Raw sector — read sector 16 (PVD) to determine header size and first_sector
         uint8_t header[32];
         // Sector 16 is at file offset 16 * 2352
-        std::fseek(rat->file, 16 * (long)rat->sector_size, SEEK_SET);
-        size_t rd = std::fread(header, 1, sizeof(header), rat->file);
+        rat->file->seek(16 * (s64)rat->sector_size, SEEK_SET);
+        size_t rd = rat->file->read(header, 1, sizeof(header));
         if (rd >= 32) {
             // Check for sync pattern 00 FF FF FF FF FF FF FF FF FF FF 00
             static const uint8_t sync[] = {0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x00};
@@ -1721,8 +1748,8 @@ static size_t tico_cdreader_read_sector(void* track_handle, uint32_t sector, voi
 
     requested_bytes = std::min<size_t>(requested_bytes, data_size);
 
-    std::fseek(rat->file, file_offset, SEEK_SET);
-    size_t nread = std::fread(buffer, 1, requested_bytes, rat->file);
+    rat->file->seek((s64)file_offset, SEEK_SET);
+    size_t nread = rat->file->read(buffer, 1, requested_bytes);
     return nread;
 }
 
@@ -1742,32 +1769,34 @@ static uint32_t tico_cdreader_first_track_sector(void* track_handle) {
 void TicoCore::RAIdentifyGame(rc_client_t* c, TicoCore* core) {
     if (!c || !core || !core->m_gameLoaded) return;
 
-    // Dreamcast = RC_CONSOLE_DREAMCAST = 40
-    uint32_t console_id = 40;
+    // Arcade hashes by rom name (RC_CONSOLE_ARCADE); Dreamcast hashes the disc.
+    const bool arcade = TicoIsArcadeRom(core->m_gamePath);
+    const uint32_t console_id = arcade ? 27u   // RC_CONSOLE_ARCADE
+                                       : 40u;  // RC_CONSOLE_DREAMCAST
 
-    // Use the pre-opened disc that was created BEFORE retro_load_game.
-    // This has its own FILE* handles so there are no concurrent access
-    // issues with the emulator's SH4 thread.
-    Disc* hashDisc = (Disc*)core->m_raHashDisc;
-    if (!hashDisc) {
-        LOG_CORE("RA: No pre-opened disc for hashing, skipping identification");
-        return;
+    Disc* hashDisc = nullptr;
+    if (arcade) {
+        LOG_CORE("RA: Identifying arcade game (console %u)...", console_id);
+    } else {
+        hashDisc = (Disc*)core->m_raHashDisc;
+        if (!hashDisc) {
+            LOG_CORE("RA: No pre-opened disc for hashing, skipping identification");
+            return;
+        }
+        s_hashDisk = hashDisc;
+
+        // Set custom CD hooks (disc hashing only)
+        rc_hash_callbacks_t callbacks = {};
+        callbacks.cdreader.open_track = tico_cdreader_open_track;
+        callbacks.cdreader.read_sector = tico_cdreader_read_sector;
+        callbacks.cdreader.close_track = tico_cdreader_close_track;
+        callbacks.cdreader.first_track_sector = tico_cdreader_first_track_sector;
+        rc_client_set_hash_callbacks(c, &callbacks);
+
+        LOG_CORE("RA: Identifying game for console ID %u...", console_id);
     }
-    s_hashDisk = hashDisc;
 
-    // Set custom CD hooks
-    rc_hash_callbacks_t callbacks = {};
-    callbacks.cdreader.open_track = tico_cdreader_open_track;
-    callbacks.cdreader.read_sector = tico_cdreader_read_sector;
-    callbacks.cdreader.close_track = tico_cdreader_close_track;
-    callbacks.cdreader.first_track_sector = tico_cdreader_first_track_sector;
-    rc_client_set_hash_callbacks(c, &callbacks);
-
-    LOG_CORE("RA: Identifying game for console ID %u...", console_id);
-
-    // NOTE: rc_client_begin_identify_and_load_game does hashing SYNCHRONOUSLY,
-    // then sends the hash to the server asynchronously. So s_hashDisk only needs
-    // to be valid during this call.
+    // Hashing is synchronous, so s_hashDisk only needs to be valid for this call.
     rc_client_begin_identify_and_load_game(c, console_id, core->m_gamePath.c_str(),
         nullptr, 0,
         [](int res, const char* err, rc_client_t* cc, void* ud) {
@@ -1784,10 +1813,12 @@ void TicoCore::RAIdentifyGame(rc_client_t* c, TicoCore* core) {
             }
         }, core);
 
-    // Hashing is done (synchronous). Clean up.
-    s_hashDisk = nullptr;
-    delete hashDisc;
-    core->m_raHashDisc = nullptr;
+    // Hashing is done (synchronous). Clean up the disc (disc path only).
+    if (!arcade) {
+        s_hashDisk = nullptr;
+        delete hashDisc;
+        core->m_raHashDisc = nullptr;
+    }
 }
 
 void TicoCore::PushRANotification(const std::string& title, const std::string& desc, const std::string& badge) {

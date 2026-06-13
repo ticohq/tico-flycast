@@ -17,12 +17,15 @@
 namespace Tico
 {
 
+constexpr unsigned MaxPlayers = 4;
+
 /// What to launch — argv plus the resolved content (ROM) path.
 struct LaunchInfo
 {
     int argc = 0;
     char **argv = nullptr;
     std::string contentPath;
+    std::string title;   // Display title passed by the launcher (argv[2])
 };
 
 /// Core-agnostic controller buttons, positional like SDL (A=south, B=east,
@@ -52,8 +55,23 @@ enum PadButton : uint64_t
 /// One frame's worth of neutralized input. `pressed`/`released` are the edges
 /// computed by Main this frame (replaces per-consumer debounce). Stick values
 /// use the SDL convention: range -32768..32767, +Y is down.
+struct PlayerInput
+{
+    uint64_t buttons = 0;
+    uint64_t pressed = 0;
+    uint64_t released = 0;
+    int leftStickX = 0;
+    int leftStickY = 0;
+    int rightStickX = 0;
+    int rightStickY = 0;
+};
+
+/// One frame's worth of neutralized input for every supported player. The
+/// top-level fields mirror players[0] so overlay/UI consumers can stay simple.
 struct FrameInput
 {
+    PlayerInput players[MaxPlayers] = {};
+
     uint64_t buttons = 0;
     uint64_t pressed = 0;
     uint64_t released = 0;
@@ -101,7 +119,7 @@ private:
     bool platformReady_ = false;
     bool exitLocked_ = false;
     bool socketReady_ = false;
-    uint64_t prevButtons_ = 0;
+    uint64_t prevButtons_[MaxPlayers] = {};
 };
 
 /// Overlay font/scale factor for the current Switch operation mode (handheld

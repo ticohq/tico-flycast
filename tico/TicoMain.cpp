@@ -25,7 +25,7 @@ namespace
 {
 
 #ifdef __SWITCH__
-PadState g_pad;
+PadState g_pads[MaxPlayers];
 
 /// Map libnx HidNpadButton bits to the positional PadButton scheme. Nintendo
 /// physical layout (A=east, B=south, X=north, Y=west) is translated to SDL
@@ -81,6 +81,8 @@ int Main::Run(int argc, char **argv)
     launch.argv = argv;
     if (argc > 1 && argv[1])
         launch.contentPath = argv[1];
+    if (argc > 2 && argv[2])
+        launch.title = argv[2];
 
     if (!InitPlatform())
         return 1;
@@ -151,8 +153,10 @@ bool Main::InitPlatform()
         return false;
     }
 
-    padConfigureInput(1, HidNpadStyleSet_NpadStandard);
-    padInitializeDefault(&g_pad);
+    padConfigureInput(MaxPlayers, HidNpadStyleSet_NpadStandard);
+    padInitializeDefault(&g_pads[0]);
+    for (unsigned player = 1; player < MaxPlayers; ++player)
+        padInitialize(&g_pads[player], static_cast<HidNpadIdType>(HidNpadIdType_No1 + player));
 #endif
 
     platformReady_ = true;
@@ -181,19 +185,31 @@ FrameInput Main::PollInput()
 {
     FrameInput in{};
 #ifdef __SWITCH__
-    padUpdate(&g_pad);
-    in.buttons = MapButtons(padGetButtons(&g_pad));
-    const HidAnalogStickState left = padGetStickPos(&g_pad, 0);
-    const HidAnalogStickState right = padGetStickPos(&g_pad, 1);
-    // libnx reports +Y up; convert to the SDL convention (+Y down) consumers use.
-    in.leftStickX = left.x;
-    in.leftStickY = -left.y;
-    in.rightStickX = right.x;
-    in.rightStickY = -right.y;
+    for (unsigned player = 0; player < MaxPlayers; ++player)
+    {
+        padUpdate(&g_pads[player]);
+
+        PlayerInput &slot = in.players[player];
+        slot.buttons = MapButtons(padGetButtons(&g_pads[player]));
+        const HidAnalogStickState left = padGetStickPos(&g_pads[player], 0);
+        const HidAnalogStickState right = padGetStickPos(&g_pads[player], 1);
+        // libnx reports +Y up; convert to the SDL convention (+Y down) consumers use.
+        slot.leftStickX = left.x;
+        slot.leftStickY = -left.y;
+        slot.rightStickX = right.x;
+        slot.rightStickY = -right.y;
+        slot.pressed = slot.buttons & ~prevButtons_[player];
+        slot.released = prevButtons_[player] & ~slot.buttons;
+        prevButtons_[player] = slot.buttons;
+    }
 #endif
-    in.pressed = in.buttons & ~prevButtons_;
-    in.released = prevButtons_ & ~in.buttons;
-    prevButtons_ = in.buttons;
+    in.buttons = in.players[0].buttons;
+    in.pressed = in.players[0].pressed;
+    in.released = in.players[0].released;
+    in.leftStickX = in.players[0].leftStickX;
+    in.leftStickY = in.players[0].leftStickY;
+    in.rightStickX = in.players[0].rightStickX;
+    in.rightStickY = in.players[0].rightStickY;
     return in;
 }
 
