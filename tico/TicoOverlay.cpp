@@ -393,6 +393,8 @@ void TicoOverlay::Update(float deltaTime)
     if (m_currentMenu != OverlayMenu::None)
     {
         m_animTimer += deltaTime;
+        if (m_currentMenu == OverlayMenu::QuickMenu)
+            m_quickMenuOpenTime += deltaTime;
 
 #ifdef __SWITCH__
         m_batteryTimer += deltaTime;
@@ -429,6 +431,7 @@ void TicoOverlay::Show()
     {
         m_currentMenu = OverlayMenu::QuickMenu;
         m_animTimer = 0.0f;
+        m_quickMenuOpenTime = 0.0f;
         m_quickMenuSelection = 0;
         LoadConfig();        // Reload config on open
         LoadGeneralConfig(); // Reload hour format on open
@@ -823,40 +826,76 @@ void TicoOverlay::RenderTitleCard(ImDrawList *dl, ImVec2 displaySize)
         titleStr = tr("emulator_select_disc");
     }
 
-    // Trim
+    // The launcher bakes newlines into the title for its own wrapping; flatten
+    // them so we can re-wrap and center each line ourselves.
+    std::replace(titleStr.begin(), titleStr.end(), '\n', ' ');
+    std::replace(titleStr.begin(), titleStr.end(), '\r', ' ');
+    std::replace(titleStr.begin(), titleStr.end(), '\t', ' ');
+
+    // Trim trailing whitespace.
     titleStr.erase(titleStr.find_last_not_of(" \n\r\t") + 1);
-    if (titleStr.length() > 50)
-    {
-        titleStr = titleStr.substr(0, 47) + "...";
-    }
 
     const float scale = OverlayScale();
-    const float TITLE_HEIGHT = 72.0f * scale;
     const float AVAILABLE_TOP_SPACE = 110.0f * scale;
 
-    float cardWidth = std::min(displaySize.x * 0.8f, displaySize.x * 0.4f * scale);
-    float cardX = (displaySize.x - cardWidth) * 0.5f;
-    float cardY = (AVAILABLE_TOP_SPACE - TITLE_HEIGHT) * 0.5f;
-
-    // Animation: Slide from top
+    // Animation: slide from top.
     float t = m_animTimer / 0.4f;
     if (t > 1.0f)
         t = 1.0f;
     float easeOut = 1.0f - std::pow(1.0f - t, 3.0f);
 
+    // Word-wrap long titles; each line is centered below.
+    const float maxWidth = displaySize.x * 0.7f;
+    std::vector<std::string> lines;
+    {
+        std::string cur;
+        size_t pos = 0;
+        while (pos < titleStr.size())
+        {
+            while (pos < titleStr.size() && titleStr[pos] == ' ')
+                pos++;
+            size_t end = titleStr.find(' ', pos);
+            if (end == std::string::npos)
+                end = titleStr.size();
+            std::string word = titleStr.substr(pos, end - pos);
+            pos = end;
+            if (word.empty())
+                continue;
+            std::string candidate = cur.empty() ? word : cur + " " + word;
+            if (cur.empty() || ImGui::CalcTextSize(candidate.c_str()).x <= maxWidth)
+                cur = candidate;
+            else
+            {
+                lines.push_back(cur);
+                cur = word;
+            }
+        }
+        if (!cur.empty())
+            lines.push_back(cur);
+        if (lines.empty())
+            lines.push_back(titleStr);
+        if (lines.size() > 3)
+        {
+            lines.resize(3);
+            lines[2] += "...";
+        }
+    }
+
+    const float lineHeight = ImGui::GetTextLineHeight();
+    const float blockHeight = lineHeight * (float)lines.size();
+
+    float targetTop = (AVAILABLE_TOP_SPACE - blockHeight) * 0.5f;
     float startY = -150.0f * scale;
-    float currentY = startY + (cardY - startY) * easeOut;
+    float blockTop = startY + (targetTop - startY) * easeOut;
 
-    // NO Shadow, NO Background, NO Border
-
-    // Text: Light Gray (200, 200, 200)
-    ImU32 textColor = IM_COL32(200, 200, 200, 255);
-    ImVec2 textSize = ImGui::CalcTextSize(titleStr.c_str());
-
-    float textX = cardX + (cardWidth - textSize.x) * 0.5f;
-    float textY = currentY + (TITLE_HEIGHT - textSize.y) * 0.5f;
-
-    UIStyle::DrawTextWithShadow(dl, ImVec2(textX, textY), textColor, titleStr.c_str());
+    const ImU32 textColor = IM_COL32(200, 200, 200, 255);
+    for (size_t i = 0; i < lines.size(); ++i)
+    {
+        ImVec2 sz = ImGui::CalcTextSize(lines[i].c_str());
+        float lineX = (displaySize.x - sz.x) * 0.5f;
+        float lineY = blockTop + (float)i * lineHeight;
+        UIStyle::DrawTextWithShadow(dl, ImVec2(lineX, lineY), textColor, lines[i].c_str());
+    }
 }
 
 void TicoOverlay::RenderQuickMenu(ImDrawList *dl, ImVec2 displaySize)
@@ -1423,6 +1462,18 @@ bool TicoOverlay::HandleInput(const Tico::FrameInput &input)
     bool confirmPressed = (pressed & Pad_B) != 0;
     bool backPressed = (pressed & Pad_A) != 0;
     bool xPressed = (pressed & Pad_Y) != 0;
+
+    // Minus = reset, but only after the menu's been open a moment (else the
+    // Start+Select that opened it would reset immediately).
+    constexpr float kResetThreshold = 0.6f;
+    if (m_currentMenu == OverlayMenu::QuickMenu &&
+        (pressed & Pad_Select) &&
+        m_quickMenuOpenTime > kResetThreshold)
+    {
+        m_shouldReset = true;
+        Hide();
+        return true;
+    }
 
     // X button for disc select
     if (xPressed && m_currentMenu == OverlayMenu::QuickMenu && !m_discs.empty())

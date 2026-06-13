@@ -164,6 +164,9 @@ private:
     // Exit/Reset flags
     bool m_shouldExit = false;
     bool m_shouldReset = false;
+    // Gates the Minus=reset shortcut so the open combo (Start+Select) can't
+    // trigger it immediately.
+    float m_quickMenuOpenTime = 0.0f;
 
     // Battery Status
     uint32_t m_batteryLevel = 100;

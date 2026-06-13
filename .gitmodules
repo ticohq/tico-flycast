@@ -47,6 +47,9 @@
 [submodule "rcheevos"]
 	path = rcheevos
 	url = https://github.com/RetroAchievements/rcheevos.git
+[submodule "deps/rcheevos"]
+	path = deps/rcheevos
+	url = https://github.com/RetroAchievements/rcheevos.git
 [submodule "core/deps/xbyak"]
 	path = core/deps/xbyak
 	url = https://github.com/herumi/xbyak.git

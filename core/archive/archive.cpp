@@ -26,14 +26,9 @@
 
 Archive *OpenArchive(const std::string& path)
 {
-	hostfs::File *file = nullptr;
-	hostfs::FileInfo fileInfo;
-	try {
-		fileInfo = hostfs::storage().getFileInfo(path);
-		if (!fileInfo.isDirectory)
-			file = hostfs::storage().openFile(path, "rb");
-	} catch (const hostfs::StorageException& e) {
-	}
+	// Avoid getFileInfo() here: it throws on a missing path, which aborts in
+	// this build. openFile() is null-safe and all we need.
+	hostfs::File *file = hostfs::storage().openFile(path, "rb");
 	if (file == nullptr)
 	{
 		file = hostfs::storage().openFile(path + ".7z", "rb");
@@ -49,11 +44,7 @@ Archive *OpenArchive(const std::string& path)
 		file = nullptr;
 	}
 	// Retry as a zip file
-	try {
-		if (!fileInfo.isDirectory)
-			file = hostfs::storage().openFile(path, "rb");
-	} catch (const hostfs::StorageException& e) {
-	}
+	file = hostfs::storage().openFile(path, "rb");
 	if (file == nullptr)
 	{
 		file = hostfs::storage().openFile(path + ".zip", "rb");
