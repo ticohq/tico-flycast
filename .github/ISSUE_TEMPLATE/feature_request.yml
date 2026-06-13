@@ -1,0 +1,40 @@
+name: Feature Request
+description: Suggest a feature or improvement for this emulator core.
+title: "[Feature]: "
+labels:
+  - enhancement
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search existing feature requests before creating a new one.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing feature requests.
+          required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Feature request
+      description: Describe the feature or improvement you'd like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why is this feature useful?
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: Mockups, screenshots, links, or any extra context.

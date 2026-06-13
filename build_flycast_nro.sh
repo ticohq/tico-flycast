@@ -33,6 +33,7 @@ cmake "$FLYCAST_DIR" \
     -DUSE_TICO=ON \
     -DNINTENDO_SWITCH=ON \
     -DMESA_NVK_DIR="$MESA_NVK_DIR" \
+    -DDISABLE_LOGGING=ON \
     -DCMAKE_BUILD_TYPE=Release
 
 # Build

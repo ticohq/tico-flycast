@@ -1,0 +1,107 @@
+name: Bug Report
+description: Report a bug in this emulator core.
+title: "[Bug]: "
+labels:
+  - bug
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting, please:
+
+        - Search existing issues.
+        - Make sure you're using the latest version of this core.
+        - Test whether the issue also exists in the upstream emulator, if possible.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: I am using the latest version of this core.
+          required: true
+
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      placeholder: e.g. Super Mario Sunshine
+    validations:
+      required: true
+
+  - type: input
+    id: tico
+    attributes:
+      label: tico version
+      placeholder: e.g. v1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: core
+    attributes:
+      label: Core version
+      placeholder: e.g. v1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: model
+    attributes:
+      label: Nintendo Switch model
+      options:
+        - Erista
+        - Mariko
+        - Lite
+        - OLED
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware version
+      placeholder: e.g. 20.3.0
+    validations:
+      required: true
+
+  - type: input
+    id: cfw
+    attributes:
+      label: CFW
+      placeholder: e.g. Atmosphère 1.9.2
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the issue
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: Include screenshots, videos, logs, save files, or anything else that may help.

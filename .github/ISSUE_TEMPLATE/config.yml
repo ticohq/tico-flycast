@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: tico Repository
+    url: https://github.com/ticohq/tico/issues
+    about: Report bugs related to the tico frontend, launcher, UI, downloads, or game library.
+
+  - name: Discord
+    url: https://discord.gg/DPgXGqJMkJ
+    about: Questions, support, and general discussion.
