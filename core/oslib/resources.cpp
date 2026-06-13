@@ -48,7 +48,7 @@ std::unique_ptr<u8[]> load(const std::string& path, size_t& size)
 				}
 			}
 		}
-		else
+		else if (fs.exists(path))
 		{
 			cmrc::file file = fs.open(path);
 			size = file.size();
@@ -57,6 +57,8 @@ std::unique_ptr<u8[]> load(const std::string& path, size_t& size)
 
 			return buffer;
 		}
+		// Guard with exists() (the catch below is unreliable in this build, and
+		// cmrc's open() would abort on a missing resource).
 	} catch (const std::system_error& e) {
 	}
 	INFO_LOG(COMMON, "Resource not found: %s", path.c_str());

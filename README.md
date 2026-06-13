@@ -1,99 +1,42 @@
-# Flycast
+<picture>  
+<source media="(prefers-color-scheme: dark)" srcset="https://i.imgur.com/8qsV6MH.png">  
+<source media="(prefers-color-scheme: light)" srcset="https://i.imgur.com/4cpzGnB.png">  
+<img src="https://i.imgur.com/8qsV6MH.png" width="200">  
+</picture>  
 
-[![Android CI](https://github.com/flyinghead/flycast/actions/workflows/android.yml/badge.svg)](https://github.com/flyinghead/flycast/actions/workflows/android.yml)
-[![C/C++ CI](https://github.com/flyinghead/flycast/actions/workflows/c-cpp.yml/badge.svg)](https://github.com/flyinghead/flycast/actions/workflows/c-cpp.yml)
-[![Nintendo Switch CI](https://github.com/flyinghead/flycast/actions/workflows/switch.yml/badge.svg)](https://github.com/flyinghead/flycast/actions/workflows/switch.yml)
-[![Windows UWP CI](https://github.com/flyinghead/flycast/actions/workflows/uwp.yml/badge.svg)](https://github.com/flyinghead/flycast/actions/workflows/uwp.yml)
-[![BSD CI](https://github.com/flyinghead/flycast/actions/workflows/bsd.yml/badge.svg)](https://github.com/flyinghead/flycast/actions/workflows/bsd.yml)
+*Part of the Tico ecosystem* — https://www.ticoverse.com
 
-<img src="shell/linux/flycast.png" alt="flycast logo" width="150"/>
+**Flycast** is a widely used emulator for the Sega Dreamcast, NAOMI, Atomiswave, and other related arcade systems, known for its accuracy, performance, and active development.
 
-**Flycast** is a multi-platform Sega Dreamcast, Naomi, Naomi 2, and Atomiswave emulator derived from [**reicast**](https://github.com/skmp/reicast-emulator).
+This port is exclusive to Tico, adapted to work with its frontend and runtime, and provided as a standalone build for the Nintendo Switch. It focuses on integration, consistency, and predictable behavior within the Tico ecosystem.
 
-Information about configuration and supported features can be found on [**TheArcadeStriker's flycast wiki**](https://github.com/TheArcadeStriker/flycast-wiki/wiki).
+----------
 
-Join us on our [**Discord server**](https://discord.gg/X8YWP8w) for a chat.
+## Summary
 
-## Downloads ![android](https://flyinghead.github.io/flycast-builds/android.jpg) ![windows](https://flyinghead.github.io/flycast-builds/windows.png) ![linux](https://flyinghead.github.io/flycast-builds/ubuntu.png) ![apple](https://flyinghead.github.io/flycast-builds/apple.png) ![switch](https://flyinghead.github.io/flycast-builds/switch.png) ![xbox](https://flyinghead.github.io/flycast-builds/xbox.png)
+This port focuses on making Flycast fit naturally within Tico, rather than behaving as a separate application.
 
-Get builds for your system from the [**builds page**](https://flyinghead.github.io/flycast-builds/) or [**GitHub Releases**](https://github.com/flyinghead/flycast/releases).
+It adds:
 
-- **Latest master builds:** regular builds from the `master` branch with recent fixes and updates.
-- **Nightly dev builds:** experimental builds with the latest features and changes.
-- **Stable tagged releases:** versioned release builds published on GitHub Releases.
+-   Custom overlay matching Tico design, including time, date, user avatar, and game title
+-   Explicit control over display (integer scaling and aspect ratios)
+-   Runtime-selectable rendering filters
+-   Built-in save and load state support
+-   Controller mapping aligned with Tico input conventions, including VMU and arcade stick emulation
 
-Automated test results are available from the builds page as well.
+----------
 
-## Install
+## Credits
 
-### Android ![android](https://flyinghead.github.io/flycast-builds/android.jpg)
+This port is built on top of the official Flycast emulator project.
+All core emulation work belongs to the Flycast team and its contributors.
 
-Install Flycast from [**Google Play**](https://play.google.com/store/apps/details?id=com.flycast.emulator).
+- **Official Flycast repository** — https://github.com/flyinghead/flycast
+- **Flycast website** — https://flyinghead.github.io/flycast-builds/
 
-### Flatpak (Linux ![ubuntu logo](https://flyinghead.github.io/flycast-builds/ubuntu.png))
+----------
 
-1. [Set up Flatpak](https://www.flatpak.org/setup/).
+## A Note
 
-2. Install Flycast from [Flathub](https://flathub.org/apps/details/org.flycast.Flycast):
-
-`flatpak install -y org.flycast.Flycast`
-
-3. Run Flycast:
-
-`flatpak run org.flycast.Flycast`
-
-### Homebrew (macOS ![apple logo](https://flyinghead.github.io/flycast-builds/apple.png))
-
-1. [Set up Homebrew](https://brew.sh).
-
-2. Install Flycast via Homebrew:
-
-`brew install --cask flycast`
-
-### iOS
-
-Due to persistent harassment from an iOS user, support for this platform has been dropped.
-
-### Xbox One/Series ![xbox logo](https://flyinghead.github.io/flycast-builds/xbox.png)
-
-Grab the latest build from [**the builds page**](https://flyinghead.github.io/flycast-builds/), or the [**GitHub Actions**](https://github.com/flyinghead/flycast/actions/workflows/uwp.yml). Then install it using the **Xbox Device Portal**.
-
-## Build from source
-
-### macOS
-
-Right-click the bootstrap script and choose **Open**:
-
-`shell/apple/generate_xcode_project.command`
-
-### Windows
-
-Double-click the bootstrap script:
-
-`shell\windows\generate_vs_project.bat`
-
-### Linux
-
-#### Dependencies
-
-- **C/C++ compiler toolchain** (e.g. `gcc`/`g++`)
-- **CMake**
-- **make**
-- **libcurl** (development headers)
-- **libudev** (development headers)
-- **SDL2** (development headers)
-- **Graphics API**: Vulcan, OpenGL
-
-#### Build
-
-```
-$ git clone --recursive https://github.com/flyinghead/flycast.git
-$ cd flycast
-$ mkdir build && cd build
-$ cmake ..
-$ make
-```
-
-## Packaging status
-
-[![Packaging status](https://repology.org/badge/vertical-allrepos/flycast.svg)](https://repology.org/project/flycast/versions)
+A lot of work in this scene disappears over time — not because it lacked value, but because it was never shared.
+If you are building something, consider releasing it. Even small contributions can help others move forward.

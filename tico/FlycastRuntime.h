@@ -61,6 +61,8 @@ private:
     bool chainload_ = false;
     bool frameInFlight_ = false;
     std::string romPath_;
+    std::string titleArg_;     // Display title from the launcher (argv[2])
+    bool isArcade_ = false;    // NAOMI / Atomiswave (directionals -> analog axis)
     uint32_t lastTicks_ = 0;
     float overlayBaseFontScale_ = 1.0f;
 };
