@@ -25,6 +25,14 @@ void sdl_setSpring(int port, float saturation, float speed) {
     (void)speed;
 }
 
+void sdl_setSine(int port, float power, float frequency, unsigned int duration_ms) {
+    // Stub - haptic not supported in this build
+    (void)port;
+    (void)power;
+    (void)frequency;
+    (void)duration_ms;
+}
+
 void sdl_stopHaptic(int port) {
     // Stub - haptic not supported in this build
     (void)port;
