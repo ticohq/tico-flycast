@@ -1,0 +1,1452 @@
+[
+  {
+    "_name": "anmlbskt",
+    "description": "Animal Basket",
+    "rom": [
+      {
+        "_name": "vm2001f01.u3",
+        "_size": "8388608",
+        "_crc": "4fb33380"
+      },
+      {
+        "_name": "vm2001f01.u4",
+        "_size": "8388608",
+        "_crc": "7cb2e7c3"
+      },
+      {
+        "_name": "vm2001f01.u2",
+        "_size": "8388608",
+        "_crc": "386070a1"
+      },
+      {
+        "_name": "vm2001f01.u15",
+        "_size": "8388608",
+        "_crc": "2bb1be28"
+      }
+    ]
+  },
+  {
+    "_name": "anmlbskta",
+    "description": "Animal Basket (19 Jan 2005)",
+    "_cloneof": "anmlbskt",
+    "rom": [
+      {
+        "_name": "u3",
+        "_size": "16777216",
+        "_crc": "cd082af3"
+      },
+      {
+        "_name": "u1",
+        "_size": "16777216",
+        "_crc": "4a2a01d3"
+      },
+      {
+        "_name": "u4",
+        "_size": "16777216",
+        "_crc": "646e9773"
+      },
+      {
+        "_name": "u2",
+        "_size": "16777216",
+        "_crc": "b9162d97"
+      }
+    ]
+  },
+  {
+    "_name": "basschal",
+    "description": "Sega Bass Fishing Challenge (Ver. A)",
+    "rom": [
+      {
+        "_name": "vera.u3",
+        "_size": "16777216",
+        "_crc": "8cbec9d7"
+      },
+      {
+        "_name": "vera.u1",
+        "_size": "16777216",
+        "_crc": "cfef27e5"
+      },
+      {
+        "_name": "vera.u4",
+        "_size": "16777216",
+        "_crc": "bd1f13aa"
+      },
+      {
+        "_name": "vera.u2",
+        "_size": "16777216",
+        "_crc": "0a463c37"
+      },
+      {
+        "_name": "vera.u15",
+        "_size": "16777216",
+        "_crc": "e588afd1"
+      },
+      {
+        "_name": "vera.u17",
+        "_size": "16777216",
+        "_crc": "d78389a4"
+      },
+      {
+        "_name": "vera.u14",
+        "_size": "16777216",
+        "_crc": "35df044f"
+      },
+      {
+        "_name": "vera.u16",
+        "_size": "16777216",
+        "_crc": "3590072d"
+      }
+    ]
+  },
+  {
+    "_name": "basschalo",
+    "description": "Sega Bass Fishing Challenge",
+    "_cloneof": "basschal",
+    "rom": [
+      {
+        "_name": "610-0811.u3",
+        "_size": "16777216",
+        "_crc": "ef31abe7"
+      },
+      {
+        "_name": "610-0811.u1",
+        "_size": "16777216",
+        "_crc": "44c3cf90"
+      },
+      {
+        "_name": "vera.u4",
+        "_size": "16777216",
+        "_crc": "bd1f13aa"
+      },
+      {
+        "_name": "610-0811.u2",
+        "_size": "16777216",
+        "_crc": "1c61ed69"
+      },
+      {
+        "_name": "610-0811.u15",
+        "_size": "16777216",
+        "_crc": "e8f02238"
+      },
+      {
+        "_name": "610-0811.u17",
+        "_size": "16777216",
+        "_crc": "db799f5a"
+      },
+      {
+        "_name": "610-0811.u14",
+        "_size": "16777216",
+        "_crc": "f2769383"
+      },
+      {
+        "_name": "vera.u16",
+        "_size": "16777216",
+        "_crc": "3590072d"
+      }
+    ]
+  },
+  {
+    "_name": "blokpong",
+    "description": "Block Pong-Pong",
+    "rom": [
+      {
+        "_name": "u3",
+        "_size": "16777216",
+        "_crc": "debaf8bd"
+      },
+      {
+        "_name": "u1",
+        "_size": "16777216",
+        "_crc": "ca097a3f"
+      },
+      {
+        "_name": "u4",
+        "_size": "16777216",
+        "_crc": "d235dd29"
+      }
+    ]
+  },
+  {
+    "_name": "claychal",
+    "description": "Sega Clay Challenge",
+    "rom": [
+      {
+        "_name": "608-2161.u3",
+        "_size": "16777472",
+        "_crc": "5bb65194"
+      },
+      {
+        "_name": "608-2161.u1",
+        "_size": "16777472",
+        "_crc": "526fc1af"
+      },
+      {
+        "_name": "608-2161.u4",
+        "_size": "16777472",
+        "_crc": "55f4e762"
+      },
+      {
+        "_name": "608-2161.u2",
+        "_size": "16777472",
+        "_crc": "c40dae68"
+      },
+      {
+        "_name": "608-2161.u15",
+        "_size": "16777472",
+        "_crc": "b82dcb0a"
+      },
+      {
+        "_name": "608-2161.u17",
+        "_size": "16777472",
+        "_crc": "2f973eb4"
+      },
+      {
+        "_name": "608-2161.u14",
+        "_size": "16777472",
+        "_crc": "2e7d966f"
+      },
+      {
+        "_name": "608-2161.u16",
+        "_size": "16777472",
+        "_crc": "14f8ca87"
+      }
+    ]
+  },
+  {
+    "_name": "demofist",
+    "description": "Demolish Fist",
+    "rom": [
+      {
+        "_name": "ax0601p01.ic18",
+        "_size": "8388608",
+        "_crc": "0efb38ad"
+      },
+      {
+        "_name": "ax0601m01.ic11",
+        "_size": "16777216",
+        "_crc": "12fda2c7"
+      },
+      {
+        "_name": "ax0602m01.ic12",
+        "_size": "16777216",
+        "_crc": "aea61fdf"
+      },
+      {
+        "_name": "ax0603m01.ic13",
+        "_size": "16777216",
+        "_crc": "d5879d35"
+      },
+      {
+        "_name": "ax0604m01.ic14",
+        "_size": "16777216",
+        "_crc": "a7b09048"
+      },
+      {
+        "_name": "ax0605m01.ic15",
+        "_size": "16777216",
+        "_crc": "18d8437e"
+      },
+      {
+        "_name": "ax0606m01.ic16",
+        "_size": "16777216",
+        "_crc": "42c81617"
+      },
+      {
+        "_name": "ax0607m01.ic17",
+        "_size": "16777216",
+        "_crc": "96e5aa84"
+      }
+    ]
+  },
+  {
+    "_name": "dirtypig",
+    "description": "Dirty Pigskin Football",
+    "rom": [
+      {
+        "_name": "695-0014.u3",
+        "_size": "16777216",
+        "_crc": "9fdd7d07"
+      },
+      {
+        "_name": "695-0014.u1",
+        "_size": "16777216",
+        "_crc": "a91d2fcb"
+      },
+      {
+        "_name": "695-0014.u4",
+        "_size": "16777216",
+        "_crc": "3342f237"
+      },
+      {
+        "_name": "695-0014.u2",
+        "_size": "16777216",
+        "_crc": "4d82152f"
+      },
+      {
+        "_name": "695-0014.u15",
+        "_size": "16777216",
+        "_crc": "d239a549"
+      },
+      {
+        "_name": "695-0014.u17",
+        "_size": "16777216",
+        "_crc": "16bb5992"
+      },
+      {
+        "_name": "695-0014.u14",
+        "_size": "16777216",
+        "_crc": "55470242"
+      },
+      {
+        "_name": "695-0014.u16",
+        "_size": "16777216",
+        "_crc": "730180a4"
+      }
+    ]
+  },
+  {
+    "_name": "dolphin",
+    "description": "Dolphin Blue",
+    "rom": [
+      {
+        "_name": "ax0401p01.ic18",
+        "_size": "8388608",
+        "_crc": "195d6328"
+      },
+      {
+        "_name": "ax0401m01.ic11",
+        "_size": "16777216",
+        "_crc": "5e5dca57"
+      },
+      {
+        "_name": "ax0402m01.ic12",
+        "_size": "16777216",
+        "_crc": "77dd4771"
+      },
+      {
+        "_name": "ax0403m01.ic13",
+        "_size": "16777216",
+        "_crc": "911d0674"
+      },
+      {
+        "_name": "ax0404m01.ic14",
+        "_size": "16777216",
+        "_crc": "f82a4ca3"
+      },
+      {
+        "_name": "ax0405m01.ic15",
+        "_size": "16777216",
+        "_crc": "b88298d7"
+      }
+    ]
+  },
+  {
+    "_name": "fotns",
+    "description": "Fist Of The North Star",
+    "rom": [
+      {
+        "_name": "ax1901p01.ic18",
+        "_size": "8388608",
+        "_crc": "a06998b0"
+      },
+      {
+        "_name": "ax1901m01.ic11",
+        "_size": "16777216",
+        "_crc": "ff5a1642"
+      },
+      {
+        "_name": "ax1902m01.ic12",
+        "_size": "16777216",
+        "_crc": "d9aae8a9"
+      },
+      {
+        "_name": "ax1903m01.ic13",
+        "_size": "16777216",
+        "_crc": "1711b23d"
+      },
+      {
+        "_name": "ax1904m01.ic14",
+        "_size": "16777216",
+        "_crc": "443bfb26"
+      },
+      {
+        "_name": "ax1905m01.ic15",
+        "_size": "16777216",
+        "_crc": "eb1cada0"
+      },
+      {
+        "_name": "ax1906m01.ic16",
+        "_size": "16777216",
+        "_crc": "fe6da168"
+      },
+      {
+        "_name": "ax1907m01.ic17",
+        "_size": "16777216",
+        "_crc": "9d3a0520"
+      }
+    ]
+  },
+  {
+    "_name": "ftspeed",
+    "description": "Faster Than Speed",
+    "rom": [
+      {
+        "_name": "ax1701p01.ic18",
+        "_size": "8388608",
+        "_crc": "480cade7"
+      },
+      {
+        "_name": "ax1701m01.ic11",
+        "_size": "16777216",
+        "_crc": "7dcdc784"
+      },
+      {
+        "_name": "ax1702m01.ic12",
+        "_size": "16777216",
+        "_crc": "06c9bf85"
+      },
+      {
+        "_name": "ax1703m01.ic13",
+        "_size": "16777216",
+        "_crc": "8f8e0224"
+      },
+      {
+        "_name": "ax1704m01.ic14",
+        "_size": "16777216",
+        "_crc": "fbb4bb16"
+      },
+      {
+        "_name": "ax1705m01.ic15",
+        "_size": "16777216",
+        "_crc": "996f68e1"
+      },
+      {
+        "_name": "ax1706m01.ic16",
+        "_size": "16777216",
+        "_crc": "804b2eb2"
+      }
+    ]
+  },
+  {
+    "_name": "ggisuka",
+    "description": "Guilty Gear Isuka",
+    "rom": [
+      {
+        "_name": "ax1201p01.ic18",
+        "_size": "8388608",
+        "_crc": "0a78d52c"
+      },
+      {
+        "_name": "ax1201m01.ic10",
+        "_size": "16777216",
+        "_crc": "df96ce30"
+      },
+      {
+        "_name": "ax1202m01.ic11",
+        "_size": "16777216",
+        "_crc": "dfc6fd67"
+      },
+      {
+        "_name": "ax1203m01.ic12",
+        "_size": "16777216",
+        "_crc": "bf623df9"
+      },
+      {
+        "_name": "ax1204m01.ic13",
+        "_size": "16777216",
+        "_crc": "c80c3930"
+      },
+      {
+        "_name": "ax1205m01.ic14",
+        "_size": "16777216",
+        "_crc": "e99a269d"
+      },
+      {
+        "_name": "ax1206m01.ic15",
+        "_size": "16777216",
+        "_crc": "807ab795"
+      },
+      {
+        "_name": "ax1207m01.ic16",
+        "_size": "16777216",
+        "_crc": "6636d1b8"
+      },
+      {
+        "_name": "ax1208m01.ic17",
+        "_size": "16777216",
+        "_crc": "38bda476"
+      }
+    ]
+  },
+  {
+    "_name": "ggx15",
+    "description": "Guilty Gear X ver. 1.5",
+    "rom": [
+      {
+        "_name": "ax0801p01.ic18",
+        "_size": "8388608",
+        "_crc": "d920c6bb"
+      },
+      {
+        "_name": "ax0801m01.ic11",
+        "_size": "16777216",
+        "_crc": "61879b2d"
+      },
+      {
+        "_name": "ax0802m01.ic12",
+        "_size": "16777216",
+        "_crc": "c0ff124d"
+      },
+      {
+        "_name": "ax0803m01.ic13",
+        "_size": "16777216",
+        "_crc": "4400c89a"
+      },
+      {
+        "_name": "ax0804m01.ic14",
+        "_size": "16777216",
+        "_crc": "70f58ab4"
+      },
+      {
+        "_name": "ax0805m01.ic15",
+        "_size": "16777216",
+        "_crc": "72740e45"
+      },
+      {
+        "_name": "ax0806m01.ic16",
+        "_size": "16777216",
+        "_crc": "3bf8ecba"
+      },
+      {
+        "_name": "ax0807m01.ic17",
+        "_size": "16777216",
+        "_crc": "e397dd79"
+      }
+    ]
+  },
+  {
+    "_name": "kofnw",
+    "description": "The King of Fighters Neowave",
+    "rom": [
+      {
+        "_name": "ax2201en_p01.ic18",
+        "_size": "8388608",
+        "_crc": "27aab918"
+      },
+      {
+        "_name": "ax2201m01.ic11",
+        "_size": "16777216",
+        "_crc": "22ea665b"
+      },
+      {
+        "_name": "ax2202m01.ic12",
+        "_size": "16777216",
+        "_crc": "7fad1bea"
+      },
+      {
+        "_name": "ax2203m01.ic13",
+        "_size": "16777216",
+        "_crc": "78986ca4"
+      },
+      {
+        "_name": "ax2204m01.ic14",
+        "_size": "16777216",
+        "_crc": "6ffbeb04"
+      },
+      {
+        "_name": "ax2205m01.ic15",
+        "_size": "16777216",
+        "_crc": "2851b791"
+      },
+      {
+        "_name": "ax2206m01.ic16",
+        "_size": "16777216",
+        "_crc": "e53eb965"
+      }
+    ]
+  },
+  {
+    "_name": "kofnwj",
+    "description": "The King of Fighters Neowave (Japan)",
+    "_cloneof": "kofnw",
+    "rom": [
+      {
+        "_name": "ax2201jp_p01.ic18",
+        "_size": "8388608",
+        "_crc": "ecc4a5c7"
+      },
+      {
+        "_name": "ax2201m01.ic11",
+        "_size": "16777216",
+        "_crc": "22ea665b"
+      },
+      {
+        "_name": "ax2202m01.ic12",
+        "_size": "16777216",
+        "_crc": "7fad1bea"
+      },
+      {
+        "_name": "ax2203m01.ic13",
+        "_size": "16777216",
+        "_crc": "78986ca4"
+      },
+      {
+        "_name": "ax2204m01.ic14",
+        "_size": "16777216",
+        "_crc": "6ffbeb04"
+      },
+      {
+        "_name": "ax2205m01.ic15",
+        "_size": "16777216",
+        "_crc": "2851b791"
+      },
+      {
+        "_name": "ax2206m01.ic16",
+        "_size": "16777216",
+        "_crc": "e53eb965"
+      }
+    ]
+  },
+  {
+    "_name": "kofxi",
+    "description": "The King of Fighters XI",
+    "rom": [
+      {
+        "_name": "ax3201p01.fmem1",
+        "_size": "8388608",
+        "_crc": "6dbdd71b"
+      },
+      {
+        "_name": "ax3201m01.mrom1",
+        "_size": "33554432",
+        "_crc": "7f9d6af9"
+      },
+      {
+        "_name": "ax3202m01.mrom2",
+        "_size": "33554432",
+        "_crc": "1ae40afa"
+      },
+      {
+        "_name": "ax3203m01.mrom3",
+        "_size": "33554432",
+        "_crc": "8c5e3bfd"
+      },
+      {
+        "_name": "ax3204m01.mrom4",
+        "_size": "33554432",
+        "_crc": "ba97f80c"
+      },
+      {
+        "_name": "ax3205m01.mrom5",
+        "_size": "33554432",
+        "_crc": "3c747067"
+      },
+      {
+        "_name": "ax3206m01.mrom6",
+        "_size": "33554432",
+        "_crc": "cb81e5f5"
+      },
+      {
+        "_name": "ax3207m01.mrom7",
+        "_size": "33554432",
+        "_crc": "164f6329"
+      }
+    ]
+  },
+  {
+    "_name": "kov7sprt",
+    "description": "Knights of Valour - The Seven Spirits",
+    "rom": [
+      {
+        "_name": "ax1301p01.ic18",
+        "_size": "8388608",
+        "_crc": "6833a334"
+      },
+      {
+        "_name": "ax1301m01.ic11",
+        "_size": "16777216",
+        "_crc": "58ae7ca1"
+      },
+      {
+        "_name": "ax1301m02.ic12",
+        "_size": "16777216",
+        "_crc": "871ea03f"
+      },
+      {
+        "_name": "ax1301m03.ic13",
+        "_size": "16777216",
+        "_crc": "abc328bc"
+      },
+      {
+        "_name": "ax1301m04.ic14",
+        "_size": "16777216",
+        "_crc": "25a176d1"
+      },
+      {
+        "_name": "ax1301m05.ic15",
+        "_size": "16777216",
+        "_crc": "e6573a93"
+      },
+      {
+        "_name": "ax1301m06.ic16",
+        "_size": "16777216",
+        "_crc": "cb8cacb4"
+      },
+      {
+        "_name": "ax1301m07.ic17",
+        "_size": "16777216",
+        "_crc": "0ca92213"
+      }
+    ]
+  },
+  {
+    "_name": "maxspeed",
+    "description": "Maximum Speed",
+    "rom": [
+      {
+        "_name": "ax0501p01.ic18",
+        "_size": "8388608",
+        "_crc": "e1651867"
+      },
+      {
+        "_name": "ax0501m01.ic11",
+        "_size": "16777216",
+        "_crc": "4a847a59"
+      },
+      {
+        "_name": "ax0502m01.ic12",
+        "_size": "16777216",
+        "_crc": "2580237f"
+      },
+      {
+        "_name": "ax0503m01.ic13",
+        "_size": "16777216",
+        "_crc": "e5a3766b"
+      },
+      {
+        "_name": "ax0504m01.ic14",
+        "_size": "16777216",
+        "_crc": "7955b55a"
+      },
+      {
+        "_name": "ax0505m01.ic15",
+        "_size": "16777216",
+        "_crc": "e8ccc660"
+      }
+    ]
+  },
+  {
+    "_name": "mslug6",
+    "description": "Metal Slug 6",
+    "rom": [
+      {
+        "_name": "ax3001p01.fmem1",
+        "_size": "8388608",
+        "_crc": "af67dbce"
+      },
+      {
+        "_name": "ax3001m01.mrom1",
+        "_size": "33554432",
+        "_crc": "e56417ee"
+      },
+      {
+        "_name": "ax3002m01.mrom2",
+        "_size": "33554432",
+        "_crc": "1be3bbc1"
+      },
+      {
+        "_name": "ax3003m01.mrom3",
+        "_size": "33554432",
+        "_crc": "4fe37370"
+      },
+      {
+        "_name": "ax3004m01.mrom4",
+        "_size": "33554432",
+        "_crc": "2f4c4c6f"
+      }
+    ]
+  },
+  {
+    "_name": "ngbc",
+    "description": "NeoGeo Battle Coliseum",
+    "rom": [
+      {
+        "_name": "ax3301en_p01.fmem1",
+        "_size": "8388608",
+        "_crc": "f7e24e67"
+      },
+      {
+        "_name": "ax3301m01.mrom1",
+        "_size": "33554432",
+        "_crc": "e6013de9"
+      },
+      {
+        "_name": "ax3302m01.mrom2",
+        "_size": "33554432",
+        "_crc": "f7cfef6c"
+      },
+      {
+        "_name": "ax3303m01.mrom3",
+        "_size": "33554432",
+        "_crc": "0cdf8647"
+      },
+      {
+        "_name": "ax3304m01.mrom4",
+        "_size": "33554432",
+        "_crc": "2f031db0"
+      },
+      {
+        "_name": "ax3305m01.mrom5",
+        "_size": "33554432",
+        "_crc": "f6668aaa"
+      },
+      {
+        "_name": "ax3306m01.mrom6",
+        "_size": "33554432",
+        "_crc": "5cf32fbd"
+      },
+      {
+        "_name": "ax3307m01.mrom7",
+        "_size": "33554432",
+        "_crc": "26d9da53"
+      }
+    ]
+  },
+  {
+    "_name": "ngbcj",
+    "description": "NeoGeo Battle Coliseum (Japan)",
+    "_cloneof": "ngbc",
+    "rom": [
+      {
+        "_name": "ax3301p01.fmem1",
+        "_size": "8388608",
+        "_crc": "6dd78275"
+      },
+      {
+        "_name": "ax3301m01.mrom1",
+        "_size": "33554432",
+        "_crc": "e6013de9"
+      },
+      {
+        "_name": "ax3302m01.mrom2",
+        "_size": "33554432",
+        "_crc": "f7cfef6c"
+      },
+      {
+        "_name": "ax3303m01.mrom3",
+        "_size": "33554432",
+        "_crc": "0cdf8647"
+      },
+      {
+        "_name": "ax3304m01.mrom4",
+        "_size": "33554432",
+        "_crc": "2f031db0"
+      },
+      {
+        "_name": "ax3305m01.mrom5",
+        "_size": "33554432",
+        "_crc": "f6668aaa"
+      },
+      {
+        "_name": "ax3306m01.mrom6",
+        "_size": "33554432",
+        "_crc": "5cf32fbd"
+      },
+      {
+        "_name": "ax3307m01.mrom7",
+        "_size": "33554432",
+        "_crc": "26d9da53"
+      }
+    ]
+  },
+  {
+    "_name": "rangrmsn",
+    "description": "Ranger Mission",
+    "rom": [
+      {
+        "_name": "ax1601p01.ic18",
+        "_size": "8388608",
+        "_crc": "00a74fbb"
+      },
+      {
+        "_name": "ax1601m01.ic11",
+        "_size": "16777216",
+        "_crc": "f34eed33"
+      },
+      {
+        "_name": "ax1602m01.ic12",
+        "_size": "16777216",
+        "_crc": "a7d59efb"
+      },
+      {
+        "_name": "ax1603m01.ic13",
+        "_size": "16777216",
+        "_crc": "7c0aa241"
+      },
+      {
+        "_name": "ax1604m01.ic14",
+        "_size": "16777216",
+        "_crc": "d2369144"
+      },
+      {
+        "_name": "ax1605m01.ic15",
+        "_size": "16777216",
+        "_crc": "0c11c1f9"
+      }
+    ]
+  },
+  {
+    "_name": "rumblef",
+    "description": "The Rumble Fish",
+    "rom": [
+      {
+        "_name": "ax1801p01.ic18",
+        "_size": "8388608",
+        "_crc": "2f7fb163"
+      },
+      {
+        "_name": "ax1801m01.ic11",
+        "_size": "16777216",
+        "_crc": "c38aa61c"
+      },
+      {
+        "_name": "ax1802m01.ic12",
+        "_size": "16777216",
+        "_crc": "72e0ebc8"
+      },
+      {
+        "_name": "ax1803m01.ic13",
+        "_size": "16777216",
+        "_crc": "d0f59d98"
+      },
+      {
+        "_name": "ax1804m01.ic14",
+        "_size": "16777216",
+        "_crc": "15595cba"
+      },
+      {
+        "_name": "ax1805m01.ic15",
+        "_size": "16777216",
+        "_crc": "3d3f8e0d"
+      },
+      {
+        "_name": "ax1806m01.ic16",
+        "_size": "16777216",
+        "_crc": "ac2751bb"
+      },
+      {
+        "_name": "ax1807m01.ic17",
+        "_size": "16777216",
+        "_crc": "3b2fbdb0"
+      }
+    ]
+  },
+  {
+    "_name": "rumblefp",
+    "description": "The Rumble Fish (prototype)",
+    "_cloneof": "rumblef",
+    "rom": [
+      {
+        "_name": "ic12",
+        "_size": "8388608",
+        "_crc": "79866072"
+      },
+      {
+        "_name": "ic13",
+        "_size": "8388608",
+        "_crc": "5630bc83"
+      },
+      {
+        "_name": "ic14",
+        "_size": "8388608",
+        "_crc": "bcd49846"
+      },
+      {
+        "_name": "ic15",
+        "_size": "8388608",
+        "_crc": "61257cfb"
+      },
+      {
+        "_name": "ic16",
+        "_size": "8388608",
+        "_crc": "c2eb7c61"
+      },
+      {
+        "_name": "ic17",
+        "_size": "8388608",
+        "_crc": "dcf673d3"
+      },
+      {
+        "_name": "ic18",
+        "_size": "8388608",
+        "_crc": "72c066bb"
+      },
+      {
+        "_name": "ic19",
+        "_size": "8388608",
+        "_crc": "b20bf301"
+      },
+      {
+        "_name": "ic20",
+        "_size": "8388608",
+        "_crc": "d27e7393"
+      },
+      {
+        "_name": "ic21",
+        "_size": "8388608",
+        "_crc": "c2da1ecf"
+      },
+      {
+        "_name": "ic22",
+        "_size": "8388608",
+        "_crc": "730e0e1c"
+      },
+      {
+        "_name": "ic23",
+        "_size": "8388608",
+        "_crc": "d93afcac"
+      },
+      {
+        "_name": "ic24",
+        "_size": "8388608",
+        "_crc": "262d97b9"
+      },
+      {
+        "_name": "ic25",
+        "_size": "8388608",
+        "_crc": "e45cf169"
+      },
+      {
+        "_name": "ic26",
+        "_size": "8388608",
+        "_crc": "6421720d"
+      }
+    ]
+  },
+  {
+    "_name": "rumblef2",
+    "description": "The Rumble Fish 2",
+    "rom": [
+      {
+        "_name": "ax3401p01.fmem1",
+        "_size": "8388608",
+        "_crc": "a33601cf"
+      },
+      {
+        "_name": "ax3401m01.mrom1",
+        "_size": "33554432",
+        "_crc": "60894d4c"
+      },
+      {
+        "_name": "ax3402m01.mrom2",
+        "_size": "33554432",
+        "_crc": "e4224cc9"
+      },
+      {
+        "_name": "ax3403m01.mrom3",
+        "_size": "33554432",
+        "_crc": "081c0edb"
+      },
+      {
+        "_name": "ax3404m01.mrom4",
+        "_size": "33554432",
+        "_crc": "a426b443"
+      },
+      {
+        "_name": "ax3405m01.mrom5",
+        "_size": "33554432",
+        "_crc": "4766ce56"
+      }
+    ]
+  },
+  {
+    "_name": "rumblf2p",
+    "description": "The Rumble Fish 2 (prototype)",
+    "_cloneof": "rumblef2",
+    "rom": [
+      {
+        "_name": "ic12",
+        "_size": "8388608",
+        "_crc": "1a0e74ab"
+      },
+      {
+        "_name": "ic13",
+        "_size": "8388608",
+        "_crc": "5630bc83"
+      },
+      {
+        "_name": "ic14",
+        "_size": "8388608",
+        "_crc": "7fcfc59c"
+      },
+      {
+        "_name": "ic15",
+        "_size": "8388608",
+        "_crc": "eee00692"
+      },
+      {
+        "_name": "ic16",
+        "_size": "8388608",
+        "_crc": "cd029db9"
+      },
+      {
+        "_name": "ic17",
+        "_size": "8388608",
+        "_crc": "223a5b58"
+      },
+      {
+        "_name": "ic18",
+        "_size": "8388608",
+        "_crc": "5e2d2f67"
+      },
+      {
+        "_name": "ic19",
+        "_size": "8388608",
+        "_crc": "3cfb2adc"
+      },
+      {
+        "_name": "ic20",
+        "_size": "8388608",
+        "_crc": "2c216a05"
+      },
+      {
+        "_name": "ic21",
+        "_size": "8388608",
+        "_crc": "79540865"
+      },
+      {
+        "_name": "ic22",
+        "_size": "8388608",
+        "_crc": "c91d95a0"
+      },
+      {
+        "_name": "ic23",
+        "_size": "8388608",
+        "_crc": "5c39ca18"
+      },
+      {
+        "_name": "ic24",
+        "_size": "8388608",
+        "_crc": "858d2775"
+      },
+      {
+        "_name": "ic25",
+        "_size": "8388608",
+        "_crc": "975d35fb"
+      },
+      {
+        "_name": "ic26",
+        "_size": "8388608",
+        "_crc": "ff9a2c4c"
+      }
+    ]
+  },
+  {
+    "_name": "salmankt",
+    "description": "Net Select: Salaryman Kintaro",
+    "rom": [
+      {
+        "_name": "ax1401p01.ic18",
+        "_size": "8388608",
+        "_crc": "28d779e0"
+      },
+      {
+        "_name": "ax1401m01.ic11",
+        "_size": "16777216",
+        "_crc": "fd7af845"
+      },
+      {
+        "_name": "ax1402m01.ic12",
+        "_size": "16777216",
+        "_crc": "f6006f85"
+      },
+      {
+        "_name": "ax1403m01.ic13",
+        "_size": "16777216",
+        "_crc": "074f7c4b"
+      },
+      {
+        "_name": "ax1404m01.ic14",
+        "_size": "16777216",
+        "_crc": "af4e3829"
+      },
+      {
+        "_name": "ax1405m01.ic15",
+        "_size": "16777216",
+        "_crc": "b548446f"
+      },
+      {
+        "_name": "ax1406m01.ic16",
+        "_size": "16777216",
+        "_crc": "437673e6"
+      },
+      {
+        "_name": "ax1407m01.ic17",
+        "_size": "16777216",
+        "_crc": "6b6acc0a"
+      }
+    ]
+  },
+  {
+    "_name": "samsptk",
+    "description": "Samurai Shodown VI",
+    "rom": [
+      {
+        "_name": "ax2901p01.fmem1",
+        "_size": "8388608",
+        "_crc": "58e0030b"
+      },
+      {
+        "_name": "ax2901m01.mrom1",
+        "_size": "33554432",
+        "_crc": "dbbbd90d"
+      },
+      {
+        "_name": "ax2902m01.mrom2",
+        "_size": "33554432",
+        "_crc": "a3bd7890"
+      },
+      {
+        "_name": "ax2903m01.mrom3",
+        "_size": "33554432",
+        "_crc": "56f50fdd"
+      },
+      {
+        "_name": "ax2904m01.mrom4",
+        "_size": "33554432",
+        "_crc": "8a3ae175"
+      },
+      {
+        "_name": "ax2905m01.mrom5",
+        "_size": "33554432",
+        "_crc": "429877ba"
+      },
+      {
+        "_name": "ax2906m01.mrom6",
+        "_size": "33554432",
+        "_crc": "cb95298d"
+      },
+      {
+        "_name": "ax2907m01.mrom7",
+        "_size": "33554432",
+        "_crc": "48015081"
+      }
+    ]
+  },
+  {
+    "_name": "sprtshot",
+    "description": "Sports Shooting USA",
+    "rom": [
+      {
+        "_name": "ax0101p01.ic18",
+        "_size": "8388608",
+        "_crc": "b3642b5d"
+      },
+      {
+        "_name": "ax0101m01.ic11",
+        "_size": "16777216",
+        "_crc": "1e39184d"
+      },
+      {
+        "_name": "ax0102m01.ic12",
+        "_size": "16777216",
+        "_crc": "700764d1"
+      },
+      {
+        "_name": "ax0103m01.ic13",
+        "_size": "16777216",
+        "_crc": "6144e7a8"
+      },
+      {
+        "_name": "ax0104m01.ic14",
+        "_size": "16777216",
+        "_crc": "ccb72150"
+      }
+    ]
+  },
+  {
+    "_name": "sushibar",
+    "description": "Sushi Bar",
+    "rom": [
+      {
+        "_name": "ic12",
+        "_size": "8388608",
+        "_crc": "06a2ed58"
+      },
+      {
+        "_name": "ic14",
+        "_size": "8388608",
+        "_crc": "4860f944"
+      },
+      {
+        "_name": "ic15",
+        "_size": "8388608",
+        "_crc": "7113506c"
+      },
+      {
+        "_name": "ic16",
+        "_size": "8388608",
+        "_crc": "77e8e39e"
+      },
+      {
+        "_name": "ic17",
+        "_size": "8388608",
+        "_crc": "0eba54ea"
+      },
+      {
+        "_name": "ic18",
+        "_size": "8388608",
+        "_crc": "b9957c76"
+      }
+    ]
+  },
+  {
+    "_name": "vfurlong",
+    "description": "Net Select Horse Racing: Victory Furlong",
+    "rom": [
+      {
+        "_name": "ax2001p01.ic18",
+        "_size": "8388608",
+        "_crc": "17ea9aa9"
+      },
+      {
+        "_name": "ax2001m01.ic11",
+        "_size": "16777216",
+        "_crc": "64460b24"
+      },
+      {
+        "_name": "ax2002m01.ic12",
+        "_size": "16777216",
+        "_crc": "d4da357f"
+      },
+      {
+        "_name": "ax2003m01.ic13",
+        "_size": "16777216",
+        "_crc": "aa1e1246"
+      },
+      {
+        "_name": "ax2004m01.ic14",
+        "_size": "16777216",
+        "_crc": "4d555d7c"
+      },
+      {
+        "_name": "ax2005m01.ic15",
+        "_size": "16777216",
+        "_crc": "785208e2"
+      },
+      {
+        "_name": "ax2006m01.ic16",
+        "_size": "16777216",
+        "_crc": "8134ec55"
+      },
+      {
+        "_name": "ax2007m01.ic17",
+        "_size": "16777216",
+        "_crc": "d0557e8a"
+      }
+    ]
+  },
+  {
+    "_name": "waidrive",
+    "description": "WaiWai Drive",
+    "rom": [
+      {
+        "_name": "u3",
+        "_size": "16777216",
+        "_crc": "7acfb499"
+      },
+      {
+        "_name": "u1",
+        "_size": "16777216",
+        "_crc": "b3c1c3bb"
+      }
+    ]
+  },
+  {
+    "_name": "xtrmhunt",
+    "description": "Extreme Hunting",
+    "rom": [
+      {
+        "_name": "ax2401p01.ic18",
+        "_size": "8388608",
+        "_crc": "8e2a11f5"
+      },
+      {
+        "_name": "ax2401m01.ic11",
+        "_size": "16777216",
+        "_crc": "76dbc286"
+      },
+      {
+        "_name": "ax2402m01.ic12",
+        "_size": "16777216",
+        "_crc": "cd590ea2"
+      },
+      {
+        "_name": "ax2403m01.ic13",
+        "_size": "16777216",
+        "_crc": "06f62eb5"
+      },
+      {
+        "_name": "ax2404m01.ic14",
+        "_size": "16777216",
+        "_crc": "759ef5cb"
+      },
+      {
+        "_name": "ax2405m01.ic15",
+        "_size": "16777216",
+        "_crc": "940d77f1"
+      },
+      {
+        "_name": "ax2406m01.ic16",
+        "_size": "16777216",
+        "_crc": "cbcf2c5d"
+      }
+    ]
+  },
+  {
+    "_name": "xtrmhnt2",
+    "description": "Extreme Hunting 2",
+    "rom": [
+      {
+        "_name": "610-0752.u3",
+        "_size": "16777216",
+        "_crc": "bab6182e"
+      },
+      {
+        "_name": "610-0752.u1",
+        "_size": "16777216",
+        "_crc": "3086bc47"
+      },
+      {
+        "_name": "610-0752.u4",
+        "_size": "16777216",
+        "_crc": "9787f145"
+      },
+      {
+        "_name": "610-0752.u2",
+        "_size": "16777216",
+        "_crc": "d3a88b31"
+      },
+      {
+        "_name": "610-0752.u15",
+        "_size": "16777216",
+        "_crc": "864a6342"
+      },
+      {
+        "_name": "610-0752.u17",
+        "_size": "16777216",
+        "_crc": "a79fb1fa"
+      },
+      {
+        "_name": "610-0752.u14",
+        "_size": "16777216",
+        "_crc": "ce83bcc7"
+      },
+      {
+        "_name": "610-0752.u16",
+        "_size": "16777216",
+        "_crc": "8ac71c76"
+      }
+    ]
+  }
+]
