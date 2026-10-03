@@ -66,8 +66,8 @@ cp "$NRO_FILE" "$SCRIPT_DIR/flycast.nro"
 # Module bundle
 #
 # A module is a directory, not a bare NRO: tico discovers it by reading
-# module.json, and everything the module owns -- its settings definition,
-# gamelists and console artwork -- travels with it. romfs is per-NRO, so tico
+# module.json, and everything the module owns -- its settings definition, the
+# strings that label it, gamelists and console artwork -- travels with it. romfs is per-NRO, so tico
 # cannot read any of this out of the core; the bundle is what carries it.
 #
 # The NRO sits beside module.json, so an installed bundle is self-contained and
@@ -82,6 +82,8 @@ rm -rf "$BUILD_DIR/module"
 mkdir -p "$MODULE_OUT"
 cp -r "$MODULE_SRC/." "$MODULE_OUT/"
 cp "$NRO_FILE" "$MODULE_OUT/$MODULE_NRO"
+# tico merges these into its own strings to label the settings screen
+cp -R "$FLYCAST_DIR/tico/lang" "$MODULE_OUT/"
 
 # Tico prefers .json.gz when resolving a gamelist.
 if [ -d "$MODULE_OUT/gamelists" ]; then

@@ -7,6 +7,8 @@
     "naomi",
     "atomiswave"
   ],
+  "bool_true_value": "enabled",
+  "bool_false_value": "disabled",
   "tabs": [
     {
       "name": "settings_flycast_tab_system",
@@ -36,7 +38,8 @@
                   "label": "Default",
                   "value": "Default"
                 }
-              ]
+              ],
+              "restart": true
             },
             {
               "key": "reicast_language",
@@ -72,19 +75,22 @@
                   "label": "Default",
                   "value": "Default"
                 }
-              ]
+              ],
+              "restart": true
             },
             {
               "key": "reicast_hle_bios",
               "label": "settings_flycast_hle_bios",
               "type": "bool",
-              "default": "disabled"
+              "default": "disabled",
+              "restart": true
             },
             {
               "key": "reicast_boot_to_bios",
               "label": "settings_flycast_boot_to_bios",
               "type": "bool",
-              "default": "disabled"
+              "default": "disabled",
+              "restart": true
             },
             {
               "key": "reicast_enable_dsp",
@@ -221,7 +227,8 @@
                   "label": "TV (Composite)",
                   "value": "TV (Composite)"
                 }
-              ]
+              ],
+              "restart": true
             },
             {
               "key": "reicast_broadcast",
@@ -249,7 +256,8 @@
                   "label": "Default",
                   "value": "Default"
                 }
-              ]
+              ],
+              "restart": true
             }
           ]
         },
@@ -475,6 +483,62 @@
                 {
                   "label": "Auto",
                   "value": "Auto"
+                }
+              ]
+            },
+            {
+              "key": "fps_counter_position",
+              "label": "settings_flycast_fps_counter",
+              "type": "enum",
+              "default": "hidden",
+              "choices": [
+                {
+                  "label": "Hidden",
+                  "value": "hidden"
+                },
+                {
+                  "label": "Top left",
+                  "value": "top_left"
+                },
+                {
+                  "label": "Top right",
+                  "value": "top_right"
+                },
+                {
+                  "label": "Bottom left",
+                  "value": "bottom_left"
+                },
+                {
+                  "label": "Bottom right",
+                  "value": "bottom_right"
+                }
+              ]
+            },
+            {
+              "key": "rendered_ir_position",
+              "label": "settings_flycast_rendered_resolution",
+              "type": "enum",
+              "default": "hidden",
+              "choices": [
+                {
+                  "label": "Hidden",
+                  "value": "hidden"
+                },
+                {
+                  "label": "Top left",
+                  "value": "top_left"
+                },
+                {
+                  "label": "Top right",
+                  "value": "top_right"
+                },
+                {
+                  "label": "Bottom left",
+                  "value": "bottom_left"
+                },
+                {
+                  "label": "Bottom right",
+                  "value": "bottom_right"
                 }
               ]
             }
@@ -742,7 +806,8 @@
               "key": "reicast_widescreen_cheats",
               "label": "settings_flycast_widescreen_cheats",
               "type": "bool",
-              "default": "disabled"
+              "default": "disabled",
+              "restart": true
             },
             {
               "key": "reicast_widescreen_hack",
@@ -754,13 +819,15 @@
               "key": "reicast_gdrom_fast_loading",
               "label": "settings_flycast_gd_rom_fast_loading",
               "type": "bool",
-              "default": "disabled"
+              "default": "disabled",
+              "restart": true
             },
             {
               "key": "reicast_dc_32mb_mod",
               "label": "settings_flycast_32mb_ram",
               "type": "bool",
-              "default": "disabled"
+              "default": "disabled",
+              "restart": true
             },
             {
               "key": "reicast_custom_textures",

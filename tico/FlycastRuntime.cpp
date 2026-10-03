@@ -5,12 +5,17 @@
 
 #include "FlycastRuntime.h"
 
+#include "FlycastDiscs.h"
 #include "TicoAudio.h"
 #include "TicoConfig.h"
 #include "TicoCore.h"
 #include "TicoLogger.h"
-#include "TicoOverlay.h"
+#include "TicoOverlayHost.h"
 #include "TicoVulkan.h"
+#include "overlay/imgui_overlay.h"
+#include "overlay/overlay_ui.h"
+#include "overlay/tico_config.h"
+#include "overlay/translation_manager.h"
 
 #include "imgui.h"
 
@@ -22,10 +27,15 @@
 #include <cstdio>
 #include <string>
 #include <sys/stat.h>
+#include <vector>
 
 #ifdef __SWITCH__
 #include <switch.h>
 #endif
+
+namespace OverlayUI = SwitchFrontend::OverlayUI;
+namespace ImGuiOverlay = SwitchFrontend::ImGuiOverlay;
+namespace OverlayConfig = SwitchFrontend::TicoConfig;
 
 namespace Tico
 {
@@ -149,18 +159,88 @@ void AudioFlushCallback()
         s_audio->Flush();
 }
 
-const char *FirstExistingPath(const char *const *paths, size_t count)
+// The overlay's message for key in the language tico is set to, with one %d
+// filled in.
+std::string TrFormat(const char *key, int value)
 {
-    for (size_t i = 0; i < count; ++i)
+    const std::string format = SwitchFrontend::OverlayTranslation::tr(key);
+    char text[256];
+    std::snprintf(text, sizeof(text), format.c_str(), value);
+    return text;
+}
+
+#ifdef __SWITCH__
+bool PromptKeyboard(const char *header, const std::string &initial, size_t maxLength,
+                    std::string &output)
+{
+    SwkbdConfig keyboard;
+    if (R_FAILED(swkbdCreate(&keyboard, 0)))
+        return false;
+    swkbdConfigMakePresetDefault(&keyboard);
+    swkbdConfigSetHeaderText(&keyboard, header);
+    if (!initial.empty())
+        swkbdConfigSetInitialText(&keyboard, initial.c_str());
+    swkbdConfigSetStringLenMax(&keyboard, static_cast<u32>(maxLength));
+    std::vector<char> text(maxLength + 1);
+    const Result result = swkbdShow(&keyboard, text.data(), text.size());
+    swkbdClose(&keyboard);
+    if (R_FAILED(result))
+        return false;
+    output = text.data();
+    return true;
+}
+#endif
+
+/// Where the game goes on a screenW x screenH surface for the Display tab's
+/// display_mode ("Integer" | "Display") and display_size. Integer scales the
+/// Dreamcast's 640x480 by 1x, 2x or the largest that fits ("Auto"); Display
+/// fits an aspect ratio (4:3, 16:9, the core's own "Original") or stretches.
+void ComputeGameViewport(float screenW, float screenH, float coreAspect,
+                         float &outX, float &outY, float &outW, float &outH)
+{
+    static constexpr int kBaseW = 640;
+    static constexpr int kBaseH = 480;
+    const std::string mode = OverlayConfig::GetConfigValue("display_mode", "Display");
+    const std::string size = OverlayConfig::GetConfigValue("display_size", "4:3");
+
+    float dstWidth = screenW;
+    float dstHeight = screenH;
+    if (mode == "Integer")
     {
-        FILE *fp = std::fopen(paths[i], "rb");
-        if (fp)
+        int scale;
+        if (size == "1x")
+            scale = 1;
+        else if (size == "2x")
+            scale = 2;
+        else
+            scale = std::max(1, std::min(static_cast<int>(screenW) / kBaseW,
+                                         static_cast<int>(screenH) / kBaseH));
+        dstWidth = std::min(screenW, static_cast<float>(kBaseW * scale));
+        dstHeight = std::min(screenH, static_cast<float>(kBaseH * scale));
+    }
+    else if (size != "Stretch")
+    {
+        float ar = 4.0f / 3.0f;
+        if (size == "16:9")
+            ar = 16.0f / 9.0f;
+        else if (size == "Original")
+            ar = coreAspect > 0.0f ? coreAspect : 4.0f / 3.0f;
+        if (ar > screenW / screenH)
         {
-            std::fclose(fp);
-            return paths[i];
+            dstWidth = screenW;
+            dstHeight = screenW / ar;
+        }
+        else
+        {
+            dstHeight = screenH;
+            dstWidth = screenH * ar;
         }
     }
-    return nullptr;
+
+    outW = dstWidth;
+    outH = dstHeight;
+    outX = (screenW - dstWidth) / 2.0f;
+    outY = (screenH - dstHeight) / 2.0f;
 }
 
 std::string GameTitleFromPath(const std::string &path)
@@ -259,6 +339,13 @@ bool FlycastRuntime::Initialize(const LaunchInfo &)
 
     core_ = std::make_unique<TicoCore>();
     core_->SetAudioCallbacks(AudioSampleCallback, AudioSampleBatchCallback, AudioFlushCallback);
+    // settings.json is the one settings definition: every option it lists
+    // reaches the core with its default when the config file does not set it.
+    // The overlay reads the file after the core, which writes the defaults
+    // (renderer included) on a first run, so its saves keep them.
+    core_->EnsureConfigLoaded();
+    OverlayConfig::ReloadConfig();
+    ApplySettingsToCore();
 
     audio_ = std::make_unique<TicoAudio>();
     s_audio = audio_.get();
@@ -296,98 +383,240 @@ bool FlycastRuntime::InitOverlay(const std::string &romPath)
     if (!TicoVulkan::IsReady())
         return false;
 
-    uint32_t width = 0, height = 0;
-    TicoVulkan::GetSwapExtent(width, height);
-
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    io.IniFilename = nullptr;
-    io.LogFilename = nullptr;
-    io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
-    io.DisplaySize = ImVec2(static_cast<float>(width), static_cast<float>(height));
-    overlayBaseFontScale_ = 1.0f;
-
-    const char *const titleFontPaths[] = {
-        "romfs:/fonts/font.ttf",
-        "sdmc:/tico/fonts/font.ttf",
-        "sdmc:/tico/assets/fonts/font.ttf",
-        "sdmc:/tico/assets/font.ttf",
-    };
-    const char *const descriptionFontPaths[] = {
-        "romfs:/fonts/description.ttf",
-        "sdmc:/tico/fonts/description.ttf",
-        "sdmc:/tico/assets/fonts/description.ttf",
-        "sdmc:/tico/assets/description.ttf",
-    };
-
-    const char *titleFont = FirstExistingPath(titleFontPaths, sizeof(titleFontPaths) / sizeof(titleFontPaths[0]));
-    const char *descriptionFont = FirstExistingPath(descriptionFontPaths, sizeof(descriptionFontPaths) / sizeof(descriptionFontPaths[0]));
-    if (titleFont)
-        io.Fonts->AddFontFromFileTTF(titleFont, 30.0f);
-    if (descriptionFont)
-        io.Fonts->AddFontFromFileTTF(descriptionFont, 22.0f);
-    if (io.Fonts->Fonts.Size == 0)
+    overlayHost_ = std::make_unique<FlycastOverlayHost>(core_.get());
+    if (!ImGuiOverlay::Init(overlayHost_.get()))
     {
-        io.Fonts->AddFontDefault();
-        overlayBaseFontScale_ = 1.55f;
-    }
-    io.FontGlobalScale = overlayBaseFontScale_ * OverlayModeScale();
-
-    ImGui::StyleColorsDark();
-    ImGuiStyle &style = ImGui::GetStyle();
-    style.WindowRounding = 18.0f;
-    style.FrameRounding = 12.0f;
-    style.GrabRounding = 12.0f;
-
-    if (!TicoVulkan::InitOverlayRenderer())
-    {
-        ImGui::DestroyContext();
-        LOG_WARN("OVERLAY", "ImGui Vulkan overlay renderer unavailable");
+        overlayHost_.reset();
         return false;
     }
 
-    overlay_ = std::make_unique<TicoOverlay>();
-    overlayHost_ = std::make_unique<FlycastOverlayHost>(core_.get());
-    overlay_->SetHost(overlayHost_.get());
     // Prefer the launcher-supplied title; fall back to the rom filename.
-    overlay_->SetGameTitle(titleArg_.empty() ? GameTitleFromPath(romPath) : titleArg_);
+    OverlayUI::SetGameTitle(titleArg_.empty() ? GameTitleFromPath(romPath) : titleArg_);
+    // the menu's slots 1..4 are the state files .state0 .. .state3
+    FlycastOverlayHost *host = overlayHost_.get();
+    OverlayUI::SetSlotOccupiedCallback([host](int slot) {
+        return slot >= 1 && host->StateSlotExists(slot - 1);
+    });
+    OverlayUI::SetDiscCallback([this] {
+        std::vector<OverlayUI::DiscMenuEntry> entries;
+        discPaths_.clear();
+        if (!core_)
+            return entries;
+        std::string current = core_->GetGamePath();
+        if (current.size() >= 2 && current.front() == '"' && current.back() == '"')
+            current = current.substr(1, current.size() - 2);
+        current = NormalizeDiscPath(current);
+        for (const DiscEntry &disc : ScanDiscs(current))
+        {
+            entries.push_back({disc.displayName, disc.romPath == current});
+            discPaths_.push_back(disc.romPath);
+        }
+        return entries;
+    });
+    OverlayUI::ReloadSettings();
     overlayReady_ = true;
-    LOG_INFO("OVERLAY", "Tico overlay initialized");
     return true;
 }
 
 void FlycastRuntime::ShutdownOverlay()
 {
-    overlay_.reset();       // dtor frees textures via overlayHost_ (still alive)
+    if (overlayReady_)
+    {
+        OverlayUI::SetSlotOccupiedCallback(nullptr);
+        OverlayUI::SetDiscCallback(nullptr);
+        ImGuiOverlay::Shutdown(); // frees textures via overlayHost_ (still alive)
+    }
     overlayHost_.reset();
-    TicoVulkan::ShutdownOverlayRenderer();
-    if (ImGui::GetCurrentContext())
-        ImGui::DestroyContext();
     overlayReady_ = false;
+    menuOpen_ = false;
 }
 
 void FlycastRuntime::RenderOverlayFrame(float deltaTime)
 {
-    if (!overlayReady_ || !overlay_)
+    if (!overlayReady_)
         return;
 
     uint32_t width = 0, height = 0;
     TicoVulkan::GetSwapExtent(width, height);
+    UpdateHud(deltaTime);
+    TicoVulkan::SetOverlayDrawData(ImGuiOverlay::BuildFrame(static_cast<float>(width),
+                                                            static_cast<float>(height),
+                                                            deltaTime));
+}
 
-    ImGuiIO &io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(static_cast<float>(width), static_cast<float>(height));
-    io.DeltaTime = deltaTime > 0.0f ? deltaTime : (1.0f / 60.0f);
-    io.FontGlobalScale = overlayBaseFontScale_ * OverlayModeScale();
+void FlycastRuntime::ApplySettingsToCore()
+{
+    if (!core_)
+        return;
+    OverlayConfig::ApplyToCore([this](const std::string &key, const std::string &value) {
+        core_->SetOption(key, value);
+    });
+}
 
-    TicoVulkan::BeginOverlayFrame();
-    ImGui::NewFrame();
-    overlay_->Update(io.DeltaTime);
-    overlay_->Render(io.DisplaySize, 0, 4.0f / 3.0f,
-                     static_cast<int>(width), static_cast<int>(height),
-                     static_cast<int>(width), static_cast<int>(height));
-    ImGui::Render();
-    TicoVulkan::SetOverlayDrawData(ImGui::GetDrawData());
+void FlycastRuntime::UpdateHud(float deltaTime)
+{
+    hudFrames_++;
+    hudSeconds_ += deltaTime;
+    if (hudSeconds_ >= 0.5f)
+    {
+        hudFps_ = static_cast<float>(hudFrames_) / hudSeconds_;
+        hudFrames_ = 0;
+        hudSeconds_ = 0.0f;
+    }
+    OverlayUI::HudStats stats;
+    stats.fps = hudFps_;
+    if (core_)
+    {
+        stats.rendered_width = core_->GetFrameWidth();
+        stats.rendered_height = core_->GetFrameHeight();
+    }
+    OverlayUI::SetHudStats(stats);
+}
+
+void FlycastRuntime::OpenMenu()
+{
+    if (!overlayReady_ || menuOpen_)
+        return;
+    menuOpen_ = true;
+    navHeldPrev_ = 0;
+    navRepeatFrames_ = 0;
+    ImGuiOverlay::SetVisible(true);
+}
+
+void FlycastRuntime::CloseMenu()
+{
+    if (!menuOpen_)
+        return;
+    menuOpen_ = false;
+    ImGuiOverlay::SetVisible(false);
+}
+
+bool FlycastRuntime::FeedMenu(const FrameInput &input)
+{
+    if (!menuOpen_)
+        return false;
+
+    // Directional navigation: D-pad + left stick, edge plus hold-repeat.
+    const uint64_t buttons = input.buttons;
+    uint64_t dirHeld = 0;
+    if ((buttons & Pad_Up) || input.leftStickY < -16000) dirHeld |= Pad_Up;
+    if ((buttons & Pad_Down) || input.leftStickY > 16000) dirHeld |= Pad_Down;
+    if ((buttons & Pad_Left) || input.leftStickX < -16000) dirHeld |= Pad_Left;
+    if ((buttons & Pad_Right) || input.leftStickX > 16000) dirHeld |= Pad_Right;
+
+    uint64_t dirFire = dirHeld & ~navHeldPrev_; // new presses fire instantly
+    if (dirHeld != 0 && dirHeld == navHeldPrev_)
+    {
+        if (--navRepeatFrames_ <= 0)
+        {
+            dirFire |= dirHeld;
+            navRepeatFrames_ = kNavRepeatFrames;
+        }
+    }
+    else if (dirFire != 0)
+    {
+        navRepeatFrames_ = kNavInitialDelayFrames;
+    }
+    navHeldPrev_ = dirHeld;
+
+    // Pad_B is the Switch A button (east), Pad_A the Switch B button (south).
+    ImGuiOverlay::FeedNav({
+        .up = (dirFire & Pad_Up) != 0,
+        .down = (dirFire & Pad_Down) != 0,
+        .left = (dirFire & Pad_Left) != 0,
+        .right = (dirFire & Pad_Right) != 0,
+        .accept = (input.pressed & Pad_B) != 0,
+        .cancel = (input.pressed & Pad_A) != 0,
+    });
+    return true;
+}
+
+void FlycastRuntime::RunMenuAction()
+{
+    using OverlayUI::Action;
+    const Action action = ImGuiOverlay::ConsumeAction();
+    if (OverlayUI::ConsumeSettingsChanged())
+        ApplySettingsToCore();
+
+    switch (action)
+    {
+    case Action::None:
+        return;
+    case Action::Resume:
+        CloseMenu();
+        return;
+    case Action::Exit:
+        LOG_INFO("OVERLAY", "Exit requested");
+        CloseMenu();
+        chainload_ = true;
+        exitRequested_ = true;
+        return;
+    case Action::Reset:
+        LOG_INFO("OVERLAY", "Reset requested");
+        if (core_)
+            core_->Reset();
+        CloseMenu();
+        return;
+    case Action::SwapDisc:
+    {
+        const int index = OverlayUI::ConsumeDiscIndex();
+        if (core_ && index >= 0 && index < static_cast<int>(discPaths_.size()))
+            core_->SwapDiskByPath(discPaths_[static_cast<size_t>(index)]);
+        CloseMenu();
+        return;
+    }
+    case Action::EditText:
+    {
+        const OverlayConfig::OptionDef *option = OverlayUI::ConsumeTextEditOption();
+#ifdef __SWITCH__
+        std::string value;
+        const size_t length = option && option->max_length > 0 ? option->max_length : 64;
+        if (option &&
+            PromptKeyboard(SwitchFrontend::OverlayTranslation::tr(option->label_key).c_str(),
+                           OverlayConfig::GetOptionValue(*option), length, value))
+        {
+            OverlayConfig::SetOptionValue(*option, value);
+            OverlayUI::NotifyOptionEdited(*option);
+        }
+#else
+        (void)option;
+#endif
+        return;
+    }
+    default:
+        break;
+    }
+
+    if (OverlayUI::IsSaveStateAction(action) && overlayHost_)
+    {
+        const int slot = OverlayUI::GetStateSlotForAction(action);
+        overlayHost_->SaveStateSlot(slot - 1);
+        OverlayUI::ShowToast(TrFormat("emulator_state_saved", slot));
+        CloseMenu();
+    }
+    else if (OverlayUI::IsLoadStateAction(action) && overlayHost_)
+    {
+        const int slot = OverlayUI::GetStateSlotForAction(action);
+        overlayHost_->LoadStateSlot(slot - 1);
+        OverlayUI::ShowToast(TrFormat("emulator_state_loaded", slot));
+        CloseMenu();
+    }
+}
+
+void FlycastRuntime::UpdateGameViewport()
+{
+    uint32_t sw = 0, sh = 0;
+    TicoVulkan::GetSwapExtent(sw, sh);
+    if (sw == 0 || sh == 0)
+    {
+        TicoVulkan::SetGameViewport(0, 0, 0, 0); // full screen
+        return;
+    }
+    const float coreAspect = core_ ? core_->GetAspectRatio() : (4.0f / 3.0f);
+    float vx = 0.0f, vy = 0.0f, vw = 0.0f, vh = 0.0f;
+    ComputeGameViewport(static_cast<float>(sw), static_cast<float>(sh), coreAspect, vx, vy, vw, vh);
+    TicoVulkan::SetGameViewport(static_cast<int>(vx + 0.5f), static_cast<int>(vy + 0.5f),
+                                static_cast<int>(vw + 0.5f), static_cast<int>(vh + 0.5f));
 }
 
 void FlycastRuntime::ApplyCoreInput(const FrameInput &input)
@@ -469,32 +698,20 @@ void FlycastRuntime::ApplyCoreInput(const FrameInput &input)
 
 void FlycastRuntime::HandleInput(const FrameInput &input)
 {
-    bool consumed = false;
-    if (overlay_)
-    {
-        consumed = overlay_->HandleInput(input);
-        if (overlay_->ShouldReset())
-        {
-            LOG_INFO("OVERLAY", "Reset requested");
-            if (core_)
-                core_->Reset();
-            overlay_->ClearReset();
-        }
-        if (overlay_->ShouldExit())
-        {
-            LOG_INFO("OVERLAY", "Exit requested");
-            overlay_->ClearExit();
-            chainload_ = true;
-            exitRequested_ = true;
-        }
-    }
+    RunMenuAction();
     if (exitRequested_)
         return;
 
-    const bool overlayVisible = overlay_ && overlay_->IsVisible();
+    // Start+Select only ever opens the menu; B closes it. While the combo is
+    // held it is kept from the game.
+    const bool comboDown = (input.buttons & Pad_Start) && (input.buttons & Pad_Select);
+    if (comboDown && !menuOpen_)
+        OpenMenu();
+    const bool consumed = FeedMenu(input) || comboDown;
+
     if (core_)
     {
-        if (overlayVisible)
+        if (menuOpen_)
         {
             core_->ClearInputs();
             core_->Pause();
@@ -530,28 +747,9 @@ void FlycastRuntime::RenderFrame()
         deltaTime = 1.0f / 60.0f;
 
     RenderOverlayFrame(deltaTime);
-
-    // Apply the overlay's screen-size / display-mode selection to the game blit.
-    // The game image is composited by TicoVulkan (not ImGui), so the destination
-    // rect has to be handed to it here; otherwise it always fills the screen.
-    if (overlay_)
-    {
-        uint32_t sw = 0, sh = 0;
-        TicoVulkan::GetSwapExtent(sw, sh);
-        if (sw > 0 && sh > 0)
-        {
-            const float coreAspect = core_ ? core_->GetAspectRatio() : (4.0f / 3.0f);
-            float vx = 0.0f, vy = 0.0f, vw = 0.0f, vh = 0.0f;
-            overlay_->GetGameViewport(static_cast<float>(sw), static_cast<float>(sh),
-                                      coreAspect, vx, vy, vw, vh);
-            TicoVulkan::SetGameViewport(static_cast<int>(vx + 0.5f), static_cast<int>(vy + 0.5f),
-                                        static_cast<int>(vw + 0.5f), static_cast<int>(vh + 0.5f));
-        }
-    }
-    else
-    {
-        TicoVulkan::SetGameViewport(0, 0, 0, 0); // full screen
-    }
+    // The game image is composited by TicoVulkan (not ImGui), so the Display
+    // tab's screen size has to be handed to it as the blit's destination.
+    UpdateGameViewport();
 
     TicoVulkan::EndFrame();
     frameInFlight_ = false;
