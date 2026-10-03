@@ -2,7 +2,7 @@
   "id": "flycast",
   "name": "Flycast",
   "nro": "tico-flycast.nro",
-  "launch": "\"{nro}\" \"{rom}\" \"{title}\"",
+  "launch": "\"{nro}\" \"{rom}\" \"{title}\" \"{slug}\"",
   "settings": "config/modules/flycast/settings.json",
   "config_file": "flycast.jsonc",
   "is_libretro": true,
