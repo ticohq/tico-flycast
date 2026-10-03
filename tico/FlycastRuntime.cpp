@@ -96,17 +96,7 @@ private:
         if (dot != std::string::npos)
             name = name.substr(0, dot);
 
-        // System = the rom's parent dir (roms/<system>/<game>) -> states/<system>/.
-        std::string system = "dc";
-        if (slash != std::string::npos)
-        {
-            std::string dir = romPath.substr(0, slash);
-            size_t slash2 = dir.find_last_of("/\\");
-            if (slash2 != std::string::npos && slash2 + 1 < dir.size())
-                system = dir.substr(slash2 + 1);
-        }
-
-        const std::string stateDir = TicoConfig::StatesPath(system);
+        const std::string stateDir = TicoConfig::StatesPath();
         TicoConfig::MakeDirs(stateDir);
 
         return stateDir + name + ".state" + std::to_string(slot);
@@ -208,6 +198,7 @@ bool FlycastRuntime::Configure(const LaunchInfo &launch)
 {
     romPath_ = launch.contentPath.empty() ? TicoConfig::TEST_ROM : launch.contentPath;
     titleArg_ = launch.title;
+    TicoConfig::SetSlug(launch.argc > 3 && launch.argv[3] ? launch.argv[3] : "", romPath_);
     isArcade_ = IsArcadePath(romPath_);
     return true;
 }

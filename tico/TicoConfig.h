@@ -11,19 +11,24 @@ namespace TicoConfig {
     // Asset paths
     constexpr const char* FONT_PATH = "romfs:/fonts/font.ttf";
     constexpr const char* IMAGES_PATH = "romfs:/images/";
+    /// Console being booted: dc, naomi or atomiswave. Tico passes it as argv[3]
+    /// ("{slug}" in module.json's launch template); older launchers omit it, so
+    /// it is inferred from the ROM's parent directory (roms/<slug>/), else dc.
+    void SetSlug(const std::string &launchSlug, const std::string &romPath);
+    const std::string &Slug();
+
     /// Content directories. Tico's per-module Paths tab stores custom roots as
     /// tico_{system,saves,states}_path in flycast.jsonc; empty or missing keys
-    /// fall back to sdmc:/tico/<kind>/.
+    /// fall back to sdmc:/tico/<kind>/. Like tico's {saves}/{states}, the slug
+    /// is appended to the saves and states roots.
     ///
     /// SystemPath() is the system ROOT: Flycast's libretro shell appends its
     /// own "dc/" (shell/libretro/libretro.cpp: game_dir = "<dir>/dc/") for
     /// Dreamcast, NAOMI and Atomiswave alike, which matches the module's
     /// system_dir "dc" -- BIOS resolves to <root>/dc/ either way.
     std::string SystemPath();
-    /// <saves root>/dc/ for every system, where the core keeps its VMUs.
     std::string SavesPath();
-    /// <states root>/<slug>/
-    std::string StatesPath(const std::string &slug);
+    std::string StatesPath();
 
     /// Create a directory and any missing parents.
     void MakeDirs(const std::string &path);

@@ -413,12 +413,31 @@ std::string ContentRoot(const char *key, const char *defaultRoot)
 } // namespace
 
 namespace TicoConfig {
-std::string SystemPath() { return ContentRoot("tico_system_path", "sdmc:/tico/system/"); }
-std::string SavesPath() { return ContentRoot("tico_saves_path", "sdmc:/tico/saves/") + "dc/"; }
-std::string StatesPath(const std::string &slug)
-{
-    return ContentRoot("tico_states_path", "sdmc:/tico/states/") + slug + "/";
+namespace {
+std::string s_slug = "dc";
 }
+
+void SetSlug(const std::string &launchSlug, const std::string &romPath)
+{
+    if (!launchSlug.empty())
+    {
+        s_slug = launchSlug;
+        return;
+    }
+    const size_t slash = romPath.find_last_of("/\\");
+    if (slash == std::string::npos)
+        return;
+    const std::string dir = romPath.substr(0, slash);
+    const std::string parent = dir.substr(dir.find_last_of("/\\") + 1);
+    if (parent == "naomi" || parent == "atomiswave")
+        s_slug = parent;
+}
+
+const std::string &Slug() { return s_slug; }
+
+std::string SystemPath() { return ContentRoot("tico_system_path", "sdmc:/tico/system/"); }
+std::string SavesPath() { return ContentRoot("tico_saves_path", "sdmc:/tico/saves/") + s_slug + "/"; }
+std::string StatesPath() { return ContentRoot("tico_states_path", "sdmc:/tico/states/") + s_slug + "/"; }
 
 void MakeDirs(const std::string &path)
 {
