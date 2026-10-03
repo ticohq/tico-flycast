@@ -15,10 +15,12 @@
 #include "sdl_keyboard.h"
 #include "sdl_keyboard_mac.h"
 #include "wsi/context.h"
+#include "ui/gui.h"
 #include "emulator.h"
 #include "stdclass.h"
 #include "imgui.h"
 #include "hw/naomi/card_reader.h"
+#include "hw/naomi/multiboard.h"
 #if !defined(_WIN32) && !defined(__APPLE__) && !defined(__SWITCH__)
 #include "linux-dist/icon.h"
 #endif
@@ -32,6 +34,10 @@
 #include "dreamlink.h"
 #include "oslib/i18n.h"
 #include <unordered_map>
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <cstdio>
 
 static SDL_Window* window = NULL;
 static u32 windowFlags;
@@ -105,10 +111,15 @@ static void sdl_close_joystick(SDL_JoystickID instance)
 
 static void setWindowTitleGame()
 {
-	if (settings.naomi.slave)
-		SDL_SetWindowTitle(window, ("Flycast - Multiboard Slave " + config::loadStr("naomi", "BoardId")).c_str());
-	else
-		SDL_SetWindowTitle(window, ("Flycast - " + settings.content.title).c_str());
+	std::string title = config::loadStr("window", "title");
+	if (title.empty())
+	{
+		if (settings.naomi.slave)
+			title = "Multiboard Slave " + config::loadStr("naomi", "BoardId");
+		else
+			title = settings.content.title;
+	}
+	SDL_SetWindowTitle(window, ("Flycast - " + title).c_str());
 }
 
 static void captureMouse(bool capture)
@@ -330,6 +341,10 @@ void input_sdl_handle()
 				checkRawInput();
 				if (event.key.repeat == 0)
 				{
+					if (settings.naomi.slave) {
+						Multiboard::keyboardEvent(event.key.keysym.scancode, event.type == SDL_KEYDOWN);
+						break;
+					}
 					auto is_key_mapped = [](u32 code) -> bool {
 						const InputMapping::InputSet inputSet{InputMapping::InputDef::from_button(code)};
 #if defined(_WIN32) && !defined(TARGET_UWP)
@@ -394,23 +409,18 @@ void input_sdl_handle()
 				break;
 
 			case SDL_WINDOWEVENT:
-				if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED
+			{
+				bool displayMetricsEvent = event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED
 						|| event.window.event == SDL_WINDOWEVENT_RESTORED
 						|| event.window.event == SDL_WINDOWEVENT_MINIMIZED
-						|| event.window.event == SDL_WINDOWEVENT_MAXIMIZED)
+						|| event.window.event == SDL_WINDOWEVENT_MAXIMIZED
+						|| event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED;
+				if (displayMetricsEvent)
 				{
-#ifdef USE_VULKAN
-					if (windowFlags & SDL_WINDOW_VULKAN)
-						SDL_Vulkan_GetDrawableSize(window, &settings.display.width, &settings.display.height);
-					else
-#endif
-#ifdef USE_OPENGL
-					if (windowFlags & SDL_WINDOW_OPENGL)
-						SDL_GL_GetDrawableSize(window, &settings.display.width, &settings.display.height);
-					else
-#endif
-						SDL_GetWindowSize(window, &settings.display.width, &settings.display.height);
+					bool scaleChanged = sdl_update_display_metrics(window, windowFlags);
 					GraphicsContext::Instance()->resize();
+					if (scaleChanged)
+						gui_updateStyle();
 				}
 				else if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED)
 				{
@@ -423,6 +433,7 @@ void input_sdl_handle()
 						SDL_ShowCursor(SDL_ENABLE);
 				}
 				break;
+			}
 
 			case SDL_JOYBUTTONDOWN:
 			case SDL_JOYBUTTONUP:
@@ -597,7 +608,66 @@ void input_sdl_handle()
 	}
 }
 
+void sdlReceiveSlaveKeyboardEvent(u16 scancode, bool pressed)
+{
+	sdl_keyboard->input((SDL_Scancode)scancode, pressed);
+	if (pressed)
+	{
+		u32 flags = SDL_GetWindowFlags(window);
+		if ((flags & SDL_WINDOW_INPUT_FOCUS) == 0)
+		{
+			SDL_SetWindowInputFocus(window);
+			// Doesn't raise the window on linux but shows a popup "Flycast is ready"
+			// Likely to be the same on other platforms for security reasons.
+			SDL_RaiseWindow(window);
+		}
+	}
+}
+
 static float hdpiScaling = 1.f;
+
+bool sdl_update_display_metrics(SDL_Window *window, u32 windowFlags)
+{
+	float oldPointScale = settings.display.pointScale;
+	float oldDpi = settings.display.dpi;
+
+	int windowWidth = 0;
+	int windowHeight = 0;
+	SDL_GetWindowSize(window, &windowWidth, &windowHeight);
+
+#ifdef USE_VULKAN
+	if (windowFlags & SDL_WINDOW_VULKAN)
+		SDL_Vulkan_GetDrawableSize(window, &settings.display.width, &settings.display.height);
+	else
+#endif
+#ifdef USE_OPENGL
+	if (windowFlags & SDL_WINDOW_OPENGL)
+		SDL_GL_GetDrawableSize(window, &settings.display.width, &settings.display.height);
+	else
+#endif
+	{
+		settings.display.width = windowWidth;
+		settings.display.height = windowHeight;
+	}
+
+	if (windowWidth > 0)
+		settings.display.pointScale = (float)settings.display.width / windowWidth;
+
+	int displayIndex = SDL_GetWindowDisplayIndex(window);
+	if (displayIndex >= 0)
+	{
+		float hdpi, vdpi;
+		if (SDL_GetDisplayDPI(displayIndex, nullptr, &hdpi, &vdpi) == 0)
+			settings.display.dpi = roundf(std::max(hdpi, vdpi));
+	}
+	else {
+		WARN_LOG(RENDERER, "Cannot get the window display index: %s", SDL_GetError());
+	}
+
+	sdl_fix_steamdeck_dpi(window);
+
+	return settings.display.pointScale != oldPointScale || settings.display.dpi != oldDpi;
+}
 
 static inline void get_window_state()
 {
@@ -651,6 +721,53 @@ bool sdl_recreate_window(u32 flags)
             }
         }
         SDL_UnloadObject(shcoreDLL);
+    }
+#elif defined(__linux__)
+    // Enable HiDPI mode on Linux (GNOME, Wayland, etc.)
+    // First, try to get GNOME scale factor from environment variable or GSettings
+    hdpiScaling = 1.f;
+
+    // Check GDK_SCALE environment variable (used by GTK/GNOME applications)
+    const char* gdkScale = getenv("GDK_SCALE");
+    if (gdkScale != nullptr) {
+        char* endptr;
+        float scale = strtof(gdkScale, &endptr);
+        if (scale > 0 && endptr != gdkScale) {
+            hdpiScaling = scale;
+            NOTICE_LOG(COMMON, "Using GDK_SCALE: %.2f", hdpiScaling);
+        }
+    }
+
+    // If GDK_SCALE not set, try to detect GNOME scale factor
+    if (hdpiScaling == 1.f) {
+        // Try using GSettings to read org.gnome.desktop.interface scale-factor
+        // This requires gsettings or dconf
+        FILE* fp = popen("gsettings get org.gnome.desktop.interface scaling-factor 2>/dev/null", "r");
+        if (fp != nullptr) {
+            char buffer[32];
+            if (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+                // Output format: "uint32 2" for scale factor 2
+                int scale = 0;
+                if (sscanf(buffer, "uint32 %d", &scale) == 1 && scale > 0) {
+                    hdpiScaling = static_cast<float>(scale);
+                    NOTICE_LOG(COMMON, "Using GNOME scale factor: %.2f", hdpiScaling);
+                }
+            }
+            pclose(fp);
+        }
+    }
+
+    // Fallback: use SDL's DPI detection
+    if (hdpiScaling == 1.f) {
+        float dpi;
+        if (SDL_GetDisplayDPI(0, &dpi, nullptr, nullptr) == 0 && dpi > 0) {
+            // Standard DPI is 96, so scale factor is DPI/96
+            hdpiScaling = dpi / 96.f;
+            if (hdpiScaling > 1.2f)  // Only apply if noticeably different
+                NOTICE_LOG(COMMON, "Using SDL detected DPI: %.2f (scale %.2f)", dpi, hdpiScaling);
+            else
+                hdpiScaling = 1.f;  // Don't apply tiny scaling differences
+        }
     }
 #endif
 
@@ -890,10 +1007,13 @@ void sdl_fix_steamdeck_dpi(SDL_Window *window)
 	{
 		int displayIndex = SDL_GetWindowDisplayIndex(window);
 		SDL_DisplayMode mode;
-		SDL_GetDisplayMode(displayIndex, 0, &mode);
+		const char *displayName = nullptr;
+		if (displayIndex < 0 || SDL_GetDisplayMode(displayIndex, 0, &mode) != 0
+				|| (displayName = SDL_GetDisplayName(displayIndex)) == nullptr)
+			return;
 		if (displayIndex == 0
-				&& (strcmp(SDL_GetDisplayName(displayIndex), "ANX7530 U 3\"") == 0
-						|| strcmp(SDL_GetDisplayName(displayIndex), "XWAYLAND0 3\"") == 0)
+				&& (strcmp(displayName, "ANX7530 U 3\"") == 0
+						|| strcmp(displayName, "XWAYLAND0 3\"") == 0)
 				&& mode.w == 1280 && mode.h == 800)
 			settings.display.dpi = 206;
 	}

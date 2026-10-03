@@ -47,6 +47,11 @@ else()
 	project(flycast)
 endif()
 
+option(FLYCAST_PRESEED_DARWIN_XCODE_CHECKS "Pre-seed stable macOS feature checks for faster Xcode generation" ON)
+if(FLYCAST_PRESEED_DARWIN_XCODE_CHECKS)
+	include(DarwinXcodeProbeCache)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(CMAKE_SYSTEM_NAME MATCHES "NetBSD|Haiku" OR NINTENDO_SWITCH)
@@ -219,6 +224,10 @@ if(NINTENDO_SWITCH)
 			# gamecontroller; we no longer create an SDL window.
 			find_package(SDL2 REQUIRED)
 			target_include_directories(${PROJECT_NAME} PRIVATE ${SDL2_INCLUDE_DIRS})
+			# SDL2_INCLUDE_DIRS pulls in portlibs/switch/include, which may ship
+			# its own (newer) vulkan headers. Keep the bundled Vulkan-Headers
+			# first so vulkan.hpp and vulkan_core.h versions match.
+			target_include_directories(${PROJECT_NAME} BEFORE PRIVATE core/deps/Vulkan-Headers/include)
 			target_link_libraries(${PROJECT_NAME} PRIVATE -lcurl -lSDL2_mixer -lmpg123 -lmodplug -lopusfile -lopus -lvorbisidec -logg SDL2)
 
 			# NVK (loaderless libvulkan + nouveau DRM) - replaces the EGL/GL
@@ -226,9 +235,18 @@ if(NINTENDO_SWITCH)
 			if(NOT DEFINED MESA_NVK_DIR)
 				set(MESA_NVK_DIR "/nvk-build" CACHE PATH "Path to Mesa NVK build")
 			endif()
+			set(NVK_LIBVULKAN "${MESA_NVK_DIR}/src/nouveau/vulkan/libvulkan.a")
+			set(NVK_DEPS -ldrm_nouveau)
+			if(NOT EXISTS "${NVK_LIBVULKAN}")
+				# switch-dev image ships a Horizon-native NVK libvulkan in
+				# portlibs (no libdrm_nouveau; see its vulkan.pc)
+				set(NVK_LIBVULKAN "$ENV{DEVKITPRO}/portlibs/switch/lib/libvulkan.a")
+				set(NVK_DEPS -lexpat)
+			endif()
+			message(STATUS "NVK libvulkan: ${NVK_LIBVULKAN}")
 			target_link_libraries(${PROJECT_NAME} PRIVATE
-				${MESA_NVK_DIR}/src/nouveau/vulkan/libvulkan.a
-				-ldrm_nouveau
+				${NVK_LIBVULKAN}
+				${NVK_DEPS}
 				-lzstd
 				-lz)
 
@@ -612,7 +630,7 @@ if(NOT LIBRETRO)
 		endif()
 
 		if(USE_HOST_SDL)
-			find_package(SDL2 2.0.9)
+			find_package(SDL2 2.0.18)
 		endif()
 		if(NOT SDL2_FOUND)
 			set(SDL_TEST_ENABLED_BY_DEFAULT OFF)
@@ -1147,40 +1165,6 @@ if(NOT LIBRETRO)
 	target_compile_definitions(${PROJECT_NAME} PRIVATE USE_RACHIEVEMENTS RC_DISABLE_LUA)
 endif()
 
-if(USE_OPENGL)
-	target_compile_definitions(${PROJECT_NAME} PRIVATE USE_OPENGL)
-
-	target_sources(${PROJECT_NAME} PRIVATE
-			core/rend/gles/glcache.h
-			core/rend/gles/gldraw.cpp
-			core/rend/gles/gles.cpp
-			core/rend/gles/gles.h
-			core/rend/gles/gltex.cpp
-			core/rend/gles/quad.cpp
-			core/rend/gles/postprocess.cpp
-			core/rend/gles/postprocess.h
-			core/rend/gles/naomi2.cpp
-			core/rend/gles/naomi2.h)
-
-	if(NOT LIBRETRO)
-		target_sources(${PROJECT_NAME} PRIVATE
-				core/deps/imgui/backends/imgui_impl_opengl3.cpp
-				core/deps/imgui/backends/imgui_impl_opengl3.h
-				core/rend/gles/opengl_driver.cpp
-				core/rend/gles/opengl_driver.h)
-	endif()
-
-	if(NOT (APPLE OR USE_GLES2))
-		target_sources(${PROJECT_NAME} PRIVATE
-				core/rend/gl4/abuffer.cpp
-				core/rend/gl4/gl4.h
-				core/rend/gl4/gldraw.cpp
-				core/rend/gl4/gles.cpp
-				core/rend/gl4/gl4naomi2.cpp
-				core/rend/gl4/gl4naomi2.h)
-	endif()
-endif()
-
 target_sources(${PROJECT_NAME} PRIVATE
 		core/build.h
 		core/chd.h
@@ -1196,20 +1180,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 		core/types.h
 		core/debug/gdb_server.h)
 
-target_sources(${PROJECT_NAME} PRIVATE
-		core/rend/CustomTexture.cpp
-		core/rend/CustomTexture.h
-		core/rend/osd.cpp
-		core/rend/osd.h
-		core/rend/sorter.cpp
-		core/rend/sorter.h
-		core/rend/TexCache.cpp
-		core/rend/TexCache.h
-		core/rend/texconv.cpp
-		core/rend/texconv.h
-		core/rend/transform_matrix.cpp
-		core/rend/transform_matrix.h
-		core/rend/norend/norend.cpp)
+set(IMGUI_BACKENDS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/core/deps/imgui/backends")
 
 if(USE_VULKAN)
 	target_compile_definitions(${PROJECT_NAME} PUBLIC VK_ENABLE_BETA_EXTENSIONS VK_NO_PROTOTYPES)
@@ -1242,117 +1213,9 @@ if(USE_VULKAN)
 		add_subdirectory(core/deps/libadrenotools)
 		target_link_libraries(${PROJECT_NAME} PRIVATE adrenotools)
 	endif()
-
-	target_compile_definitions(${PROJECT_NAME} PRIVATE USE_VULKAN HAVE_VULKAN)
-	target_sources(${PROJECT_NAME} PRIVATE
-			core/rend/vulkan/oit/oit_buffer.h
-			core/rend/vulkan/oit/oit_drawer.cpp
-			core/rend/vulkan/oit/oit_drawer.h
-			core/rend/vulkan/oit/oit_pipeline.cpp
-			core/rend/vulkan/oit/oit_pipeline.h
-			core/rend/vulkan/oit/oit_renderer.cpp
-			core/rend/vulkan/oit/oit_renderpass.cpp
-			core/rend/vulkan/oit/oit_renderpass.h
-			core/rend/vulkan/oit/oit_shaders.cpp
-			core/rend/vulkan/oit/oit_shaders.h
-			core/rend/vulkan/adreno.cpp
-			core/rend/vulkan/buffer.cpp
-			core/rend/vulkan/buffer.h
-			core/rend/vulkan/commandpool.cpp
-			core/rend/vulkan/commandpool.h
-			core/rend/vulkan/compiler.cpp
-			core/rend/vulkan/compiler.h
-			core/rend/vulkan/drawer.cpp
-			core/rend/vulkan/drawer.h
-			core/rend/vulkan/pipeline.cpp
-			core/rend/vulkan/pipeline.h
-			core/rend/vulkan/quad.cpp
-			core/rend/vulkan/quad.h
-			core/rend/vulkan/shaders.cpp
-			core/rend/vulkan/shaders.h
-			core/rend/vulkan/texture.cpp
-			core/rend/vulkan/texture.h
-			core/rend/vulkan/utils.h
-			core/rend/vulkan/vmallocator.cpp
-			core/rend/vulkan/vmallocator.h
-			core/rend/vulkan/overlay.cpp
-			core/rend/vulkan/overlay.h
-			core/rend/vulkan/vulkan_context.h
-			core/rend/vulkan/vulkan.h
-			core/rend/vulkan/vulkan_renderer.cpp)
-	if(LIBRETRO)
-		target_sources(${PROJECT_NAME} PRIVATE
-				core/rend/vulkan/vk_context_lr.cpp
-				core/rend/vulkan/vk_context_lr.h)
-	else()
-		target_compile_definitions(${PROJECT_NAME} PUBLIC IMGUI_IMPL_VULKAN_NO_PROTOTYPES)
-		target_sources(${PROJECT_NAME} PRIVATE
-				core/rend/vulkan/vulkan_driver.h
-				core/rend/vulkan/vulkan_context.cpp
-				core/deps/imgui/backends/imgui_impl_vulkan.cpp
-				core/deps/imgui/backends/imgui_impl_vulkan.h)
-		if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-			target_compile_definitions(${PROJECT_NAME} PRIVATE ImTextureID=ImU64)
-		endif()
-	endif()
 endif()
 
-if(WIN32 AND USE_DX9 AND NOT LIBRETRO AND NOT WINDOWS_STORE AND ("x86" IN_LIST ARCHITECTURE OR "x86_64" IN_LIST ARCHITECTURE))
-	set(REND_DX9_FILES
-		core/rend/dx9/d3d_overlay.h
-		core/rend/dx9/d3d_overlay.cpp
-		core/rend/dx9/d3d_renderer.h
-		core/rend/dx9/d3d_renderer.cpp
-		core/rend/dx9/d3d_shaders.h
-		core/rend/dx9/d3d_shaders.cpp
-		core/rend/dx9/d3d_texture.h
-		core/rend/dx9/d3d_texture.cpp
-		core/rend/dx9/dx9_driver.h
-		core/rend/dx9/dxcontext.cpp
-		core/rend/dx9/dxcontext.h
-		core/deps/imgui/backends/imgui_impl_dx9.h
-		core/deps/imgui/backends/imgui_impl_dx9.cpp)
-	target_sources(${PROJECT_NAME} PRIVATE ${REND_DX9_FILES})
-
-	if(NOT MINGW)
-		set_source_files_properties(${REND_DX9_FILES} PROPERTIES INCLUDE_DIRECTORIES "$ENV{DXSDK_DIR}/Include")
-	endif()
-	target_compile_definitions(${PROJECT_NAME} PRIVATE USE_DX9)
-endif()
-
-if(WIN32 AND USE_DX11)
-	if(NOT LIBRETRO)
-		target_sources(${PROJECT_NAME} PRIVATE
-			core/deps/imgui/backends/imgui_impl_dx11.cpp
-			core/deps/imgui/backends/imgui_impl_dx11.h)
-	endif()
-	target_sources(${PROJECT_NAME} PRIVATE
-		core/rend/dx11/dx11_driver.h
-		core/rend/dx11/dx11_overlay.cpp
-		core/rend/dx11/dx11_overlay.h
-		core/rend/dx11/dx11_renderer.cpp
-		core/rend/dx11/dx11_renderer.h
-		core/rend/dx11/dx11_renderstate.h
-		core/rend/dx11/dx11_renderstate.cpp
-		core/rend/dx11/dx11_shaders.cpp
-		core/rend/dx11/dx11_shaders.h
-		core/rend/dx11/dx11_texture.cpp
-		core/rend/dx11/dx11_texture.h
-		core/rend/dx11/dx11context.cpp
-		core/rend/dx11/dx11context.h
-		core/rend/dx11/dx11context_lr.cpp
-		core/rend/dx11/dx11context_lr.h
-		core/rend/dx11/dx11_driver.h
-		core/rend/dx11/dx11_naomi2.cpp
-		core/rend/dx11/dx11_naomi2.h
-		core/rend/dx11/oit/dx11_oitbuffers.h
-		core/rend/dx11/oit/dx11_oitrenderer.cpp
-		core/rend/dx11/oit/dx11_oitshaders.cpp
-		core/rend/dx11/oit/dx11_oitshaders.h)
-
-	target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_D3D11)
-	target_link_libraries(${PROJECT_NAME} PRIVATE d3d11 d3dcompiler dxgi)
-endif()
+add_subdirectory(core/rend)
 
 if(ENABLE_GDB_SERVER)
 
@@ -1508,6 +1371,15 @@ if(NOT LIBRETRO)
 		target_compile_definitions(${PROJECT_NAME} PRIVATE GLES GLES3)
 		add_subdirectory(shell/android-studio/flycast/src/main/jni/src)
 		target_link_libraries(${PROJECT_NAME} PRIVATE android log)
+
+		set(GAMESDK_THREAD_CHECKS 0)
+		add_subdirectory(core/deps/gamesdk/games-frame-pacing EXCLUDE_FROM_ALL)
+		target_compile_options(swappy_static PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-vla-cxx-extension>)
+		target_compile_definitions(swappy_static PRIVATE ANDROIDGAMESDK_NO_BINARY_DEX_LINKAGE)
+	
+		target_include_directories(${PROJECT_NAME} PRIVATE core/deps/gamesdk/games-frame-pacing/include)
+		target_link_libraries(${PROJECT_NAME} PRIVATE swappy_static)
+		target_compile_definitions(${PROJECT_NAME} PRIVATE SWAPPY)
 
 	elseif(APPLE)
 		string(TIMESTAMP YEAR "%Y")
