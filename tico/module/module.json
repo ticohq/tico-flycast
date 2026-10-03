@@ -1,0 +1,110 @@
+{
+  "id": "flycast",
+  "name": "Flycast",
+  "nro": "tico-flycast.nro",
+  "launch": "\"{nro}\" \"{rom}\" \"{title}\"",
+  "settings": "config/modules/flycast/settings.json",
+  "config_file": "flycast.jsonc",
+  "is_libretro": true,
+  "system_dir": "dc",
+  "list_label": "Flycast (DC)",
+  "systems": [
+    {
+      "slug": "dc",
+      "title": "Dreamcast",
+      "short_title": "DC",
+      "extensions": [
+        ".cue",
+        ".gdi",
+        ".chd",
+        ".cdi",
+        ".m3u"
+      ],
+      "disc_based": true,
+      "naming": "redump",
+      "games_file": "dreamcast.json",
+      "retroachievements_id": 23,
+      "bios": [
+        {
+          "any_of": [
+            "dc_boot.bin"
+          ]
+        }
+      ],
+      "colors": {
+        "start": "E68A4F",
+        "end": "E6B85F",
+        "start_dark": "A86539",
+        "end_dark": "A8873F"
+      }
+    },
+    {
+      "slug": "naomi",
+      "title": "Naomi",
+      "extensions": [
+        ".zip",
+        ".7z",
+        ".cmd"
+      ],
+      "ignore": {
+        "names": [
+          "naomi",
+          "naomi2",
+          "awbios",
+          "airlbios",
+          "hod2bios",
+          "f355",
+          "f355dlx"
+        ],
+        "prefixes": [
+          "gds-"
+        ]
+      },
+      "title_rules": {
+        "articles": "keep"
+      },
+      "games_file": "naomi.json",
+      "retroachievements_id": 27,
+      "colors": {
+        "start": "1FA6E6",
+        "end": "2FD6C8",
+        "start_dark": "166F9A",
+        "end_dark": "1F9088"
+      }
+    },
+    {
+      "slug": "atomiswave",
+      "title": "Atomiswave",
+      "extensions": [
+        ".zip",
+        ".7z",
+        ".cmd"
+      ],
+      "ignore": {
+        "names": [
+          "naomi",
+          "naomi2",
+          "awbios",
+          "airlbios",
+          "hod2bios",
+          "f355",
+          "f355dlx"
+        ],
+        "prefixes": [
+          "gds-"
+        ]
+      },
+      "title_rules": {
+        "articles": "keep"
+      },
+      "games_file": "atomiswave.json",
+      "retroachievements_id": 27,
+      "colors": {
+        "start": "E6743C",
+        "end": "E6B43C",
+        "start_dark": "A8542C",
+        "end_dark": "A8842C"
+      }
+    }
+  ]
+}

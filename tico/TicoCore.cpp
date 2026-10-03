@@ -70,8 +70,8 @@ void TicoCore::LoadSRAM()
     if (lastDot != std::string::npos)
         filename = filename.substr(0, lastDot);
 
-    std::string savePathVMU = std::string(TicoConfig::SAVES_PATH) + filename + ".vmu";
-    std::string savePathSRM = std::string(TicoConfig::SAVES_PATH) + filename + ".srm";
+    std::string savePathVMU = TicoConfig::SavesPath() + filename + ".vmu";
+    std::string savePathSRM = TicoConfig::SavesPath() + filename + ".srm";
 
     std::ifstream file(savePathVMU, std::ios::binary);
     if (file)
@@ -89,7 +89,7 @@ void TicoCore::LoadSRAM()
         return;
     }
 
-    LOG_WARN("CORE", "No SRAM file found (.vmu or .srm) at %s", TicoConfig::SAVES_PATH);
+    LOG_WARN("CORE", "No SRAM file found (.vmu or .srm) at %s", TicoConfig::SavesPath().c_str());
 }
 
 void TicoCore::SaveSRAM()
@@ -111,18 +111,9 @@ void TicoCore::SaveSRAM()
     if (lastDot != std::string::npos)
         filename = filename.substr(0, lastDot);
 
-    // Ensure directory exists
-    struct stat st = {0};
-    if (stat(TicoConfig::SAVES_PATH, &st) == -1)
-    {
-#ifdef __SWITCH__
-        mkdir(TicoConfig::SAVES_PATH, 0777);
-#else
-        mkdir(TicoConfig::SAVES_PATH, 0777);
-#endif
-    }
+    TicoConfig::MakeDirs(TicoConfig::SavesPath());
 
-    std::string savePath = std::string(TicoConfig::SAVES_PATH) + filename + ".vmu";
+    std::string savePath = TicoConfig::SavesPath() + filename + ".vmu";
 
     std::ofstream file(savePath, std::ios::binary);
     if (file)
@@ -394,6 +385,51 @@ static void RC_CCONV RAServerCall(const rc_api_request_t* request, rc_client_ser
 }
 
 //==============================================================================
+// Content paths
+//==============================================================================
+
+namespace {
+std::string ContentRoot(const char *key, const char *defaultRoot)
+{
+    static nlohmann::json config = [] {
+#ifdef __SWITCH__
+        std::ifstream f("sdmc:/tico/config/cores/flycast.jsonc");
+#else
+        std::ifstream f("tico/config/cores/flycast.jsonc");
+#endif
+        nlohmann::json j = f.good() ? nlohmann::json::parse(f, nullptr, false, true)
+                                    : nlohmann::json::object();
+        return j.is_object() ? j : nlohmann::json::object();
+    }();
+
+    std::string root = defaultRoot;
+    auto it = config.find(key);
+    if (it != config.end() && it->is_string() && !it->get<std::string>().empty())
+        root = it->get<std::string>();
+    if (root.back() != '/')
+        root += '/';
+    return root;
+}
+} // namespace
+
+namespace TicoConfig {
+std::string SystemPath() { return ContentRoot("tico_system_path", "sdmc:/tico/system/"); }
+std::string SavesPath() { return ContentRoot("tico_saves_path", "sdmc:/tico/saves/") + "dc/"; }
+std::string StatesPath(const std::string &slug)
+{
+    return ContentRoot("tico_states_path", "sdmc:/tico/states/") + slug + "/";
+}
+
+void MakeDirs(const std::string &path)
+{
+    // A custom root may not exist yet, so create every missing level.
+    for (size_t at = path.find('/', path.find(":/") != std::string::npos ? path.find(":/") + 2 : 1);
+         at != std::string::npos; at = path.find('/', at + 1))
+        mkdir(path.substr(0, at).c_str(), 0777);
+}
+} // namespace TicoConfig
+
+//==============================================================================
 // Construction
 //==============================================================================
 
@@ -402,8 +438,9 @@ TicoCore::TicoCore()
     memset(m_inputState, 0, sizeof(m_inputState));
     memset(m_analogState, 0, sizeof(m_analogState));
 
-    m_systemDir = TicoConfig::SYSTEM_PATH;
-    m_saveDir = TicoConfig::SAVES_PATH;
+    m_systemDir = TicoConfig::SystemPath();
+    m_saveDir = TicoConfig::SavesPath();
+    TicoConfig::MakeDirs(m_saveDir);
 
     // Per-game VMUs (overridable in flycast_settings.json). The core persists
     // them in retro_load/unload_game, so we don't do manual SRAM handling.

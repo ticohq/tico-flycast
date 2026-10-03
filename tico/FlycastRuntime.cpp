@@ -106,14 +106,8 @@ private:
                 system = dir.substr(slash2 + 1);
         }
 
-        const std::string stateDir =
-            std::string(Tico::Paths::StatesRoot) + "/" + system + "/";
-
-        struct stat st;
-        if (stat(Tico::Paths::StatesRoot, &st) == -1)
-            mkdir(Tico::Paths::StatesRoot, 0777);
-        if (stat(stateDir.c_str(), &st) == -1)
-            mkdir(stateDir.c_str(), 0777);
+        const std::string stateDir = TicoConfig::StatesPath(system);
+        TicoConfig::MakeDirs(stateDir);
 
         return stateDir + name + ".state" + std::to_string(slot);
     }

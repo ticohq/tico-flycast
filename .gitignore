@@ -24,3 +24,5 @@ CMakeUserPresets.json
 build_tico
 build_tico_standalone
 tico-flycast-standalone.nro
+flycast.nro
+tico-*-module.zip

@@ -11,14 +11,22 @@ namespace TicoConfig {
     // Asset paths
     constexpr const char* FONT_PATH = "romfs:/fonts/font.ttf";
     constexpr const char* IMAGES_PATH = "romfs:/images/";
-    // NOTE: Flycast's libretro shell appends its own "dc/" subfolder to the
-    // system directory (shell/libretro/libretro.cpp: game_dir = "<dir>/dc/"),
-    // for Dreamcast, NAOMI and Atomiswave alike. So this must be the PARENT
-    // dir; BIOS (dc_boot.bin, naomi.zip, awbios.zip) resolves to system/dc/.
-    // (Passing ".../system/dc/" here would double it to ".../system/dc/dc/".)
-    constexpr const char* SYSTEM_PATH = "sdmc:/tico/system/";
-    constexpr const char* SAVES_PATH = "sdmc:/tico/saves/dc/";
-    constexpr const char* STATES_PATH = "sdmc:/tico/states/dc/";
+    /// Content directories. Tico's per-module Paths tab stores custom roots as
+    /// tico_{system,saves,states}_path in flycast.jsonc; empty or missing keys
+    /// fall back to sdmc:/tico/<kind>/.
+    ///
+    /// SystemPath() is the system ROOT: Flycast's libretro shell appends its
+    /// own "dc/" (shell/libretro/libretro.cpp: game_dir = "<dir>/dc/") for
+    /// Dreamcast, NAOMI and Atomiswave alike, which matches the module's
+    /// system_dir "dc" -- BIOS resolves to <root>/dc/ either way.
+    std::string SystemPath();
+    /// <saves root>/dc/ for every system, where the core keeps its VMUs.
+    std::string SavesPath();
+    /// <states root>/<slug>/
+    std::string StatesPath(const std::string &slug);
+
+    /// Create a directory and any missing parents.
+    void MakeDirs(const std::string &path);
     
     // Window settings
     constexpr int WINDOW_WIDTH = 1280;

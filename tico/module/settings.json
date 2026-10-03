@@ -1,0 +1,1740 @@
+{
+  "core_id": "flycast",
+  "display_name": "Flycast",
+  "config_file": "flycast.jsonc",
+  "slugs": [
+    "dreamcast",
+    "naomi",
+    "atomiswave"
+  ],
+  "tabs": [
+    {
+      "name": "settings_flycast_tab_system",
+      "sections": [
+        {
+          "title": "settings_flycast_section_system",
+          "options": [
+            {
+              "key": "reicast_region",
+              "label": "settings_flycast_region",
+              "type": "enum",
+              "default": "USA",
+              "choices": [
+                {
+                  "label": "Japan",
+                  "value": "Japan"
+                },
+                {
+                  "label": "USA",
+                  "value": "USA"
+                },
+                {
+                  "label": "Europe",
+                  "value": "Europe"
+                },
+                {
+                  "label": "Default",
+                  "value": "Default"
+                }
+              ]
+            },
+            {
+              "key": "reicast_language",
+              "label": "settings_flycast_language",
+              "type": "enum",
+              "default": "English",
+              "choices": [
+                {
+                  "label": "Japanese",
+                  "value": "Japanese"
+                },
+                {
+                  "label": "English",
+                  "value": "English"
+                },
+                {
+                  "label": "German",
+                  "value": "German"
+                },
+                {
+                  "label": "French",
+                  "value": "French"
+                },
+                {
+                  "label": "Spanish",
+                  "value": "Spanish"
+                },
+                {
+                  "label": "Italian",
+                  "value": "Italian"
+                },
+                {
+                  "label": "Default",
+                  "value": "Default"
+                }
+              ]
+            },
+            {
+              "key": "reicast_hle_bios",
+              "label": "settings_flycast_hle_bios",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_boot_to_bios",
+              "label": "settings_flycast_boot_to_bios",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_enable_dsp",
+              "label": "settings_flycast_enable_dsp",
+              "type": "bool",
+              "default": "enabled"
+            }
+          ]
+        },
+        {
+          "title": "settings_flycast_section_arcade",
+          "options": [
+            {
+              "key": "reicast_allow_service_buttons",
+              "label": "settings_flycast_service_buttons",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_force_freeplay",
+              "label": "settings_flycast_free_play",
+              "type": "bool",
+              "default": "enabled"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "settings_flycast_tab_video",
+      "sections": [
+        {
+          "title": "settings_flycast_section_display",
+          "options": [
+            {
+              "key": "reicast_internal_resolution",
+              "label": "settings_flycast_internal_resolution",
+              "type": "enum",
+              "default": "640x480",
+              "choices": [
+                {
+                  "label": "320x240 (Half)",
+                  "value": "320x240"
+                },
+                {
+                  "label": "640x480 (Native)",
+                  "value": "640x480"
+                },
+                {
+                  "label": "800x600 (x1.25)",
+                  "value": "800x600"
+                },
+                {
+                  "label": "960x720 (x1.5)",
+                  "value": "960x720"
+                },
+                {
+                  "label": "1024x768 (x1.6)",
+                  "value": "1024x768"
+                },
+                {
+                  "label": "1280x960 (x2)",
+                  "value": "1280x960"
+                },
+                {
+                  "label": "1440x1080 (x2.25)",
+                  "value": "1440x1080"
+                },
+                {
+                  "label": "1600x1200 (x2.5)",
+                  "value": "1600x1200"
+                },
+                {
+                  "label": "1920x1440 (x3)",
+                  "value": "1920x1440"
+                },
+                {
+                  "label": "2560x1920 (x4)",
+                  "value": "2560x1920"
+                },
+                {
+                  "label": "2880x2160 (x4.5)",
+                  "value": "2880x2160"
+                },
+                {
+                  "label": "3200x2400 (x5)",
+                  "value": "3200x2400"
+                },
+                {
+                  "label": "3840x2880 (x6)",
+                  "value": "3840x2880"
+                },
+                {
+                  "label": "4480x3360 (x7)",
+                  "value": "4480x3360"
+                },
+                {
+                  "label": "5120x3840 (x8)",
+                  "value": "5120x3840"
+                }
+              ]
+            },
+            {
+              "key": "reicast_screen_rotation",
+              "label": "settings_flycast_screen_orientation",
+              "type": "enum",
+              "default": "horizontal",
+              "choices": [
+                {
+                  "label": "Horizontal",
+                  "value": "horizontal"
+                },
+                {
+                  "label": "Vertical",
+                  "value": "vertical"
+                }
+              ]
+            },
+            {
+              "key": "reicast_cable_type",
+              "label": "settings_flycast_cable_type",
+              "type": "enum",
+              "default": "TV (Composite)",
+              "choices": [
+                {
+                  "label": "VGA",
+                  "value": "VGA"
+                },
+                {
+                  "label": "TV (RGB)",
+                  "value": "TV (RGB)"
+                },
+                {
+                  "label": "TV (Composite)",
+                  "value": "TV (Composite)"
+                }
+              ]
+            },
+            {
+              "key": "reicast_broadcast",
+              "label": "settings_flycast_broadcast_standard",
+              "type": "enum",
+              "default": "NTSC",
+              "choices": [
+                {
+                  "label": "NTSC",
+                  "value": "NTSC"
+                },
+                {
+                  "label": "PAL (World)",
+                  "value": "PAL"
+                },
+                {
+                  "label": "PAL-N (Argentina/Uruguay)",
+                  "value": "PAL_N"
+                },
+                {
+                  "label": "PAL-M (Brazil)",
+                  "value": "PAL_M"
+                },
+                {
+                  "label": "Default",
+                  "value": "Default"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "settings_flycast_section_rendering",
+          "options": [
+            {
+              "key": "reicast_alpha_sorting",
+              "label": "settings_flycast_alpha_sorting",
+              "type": "enum",
+              "default": "per-triangle (normal)",
+              "choices": [
+                {
+                  "label": "Per-Strip (Fast)",
+                  "value": "per-strip (fast, least accurate)"
+                },
+                {
+                  "label": "Per-Triangle (Normal)",
+                  "value": "per-triangle (normal)"
+                },
+                {
+                  "label": "Per-Pixel (Accurate)",
+                  "value": "per-pixel (accurate)"
+                }
+              ]
+            },
+            {
+              "key": "reicast_mipmapping",
+              "label": "settings_flycast_mipmapping_video",
+              "type": "bool",
+              "default": "enabled"
+            },
+            {
+              "key": "reicast_fog",
+              "label": "settings_flycast_fog_effects",
+              "type": "bool",
+              "default": "enabled"
+            },
+            {
+              "key": "reicast_volume_modifier_enable",
+              "label": "settings_flycast_volume_modifier",
+              "type": "bool",
+              "default": "enabled"
+            },
+            {
+              "key": "reicast_anisotropic_filtering",
+              "label": "settings_flycast_anisotropic_filtering",
+              "type": "enum",
+              "default": "4",
+              "choices": [
+                {
+                  "label": "Off",
+                  "value": "off"
+                },
+                {
+                  "label": "2x",
+                  "value": "2"
+                },
+                {
+                  "label": "4x",
+                  "value": "4"
+                },
+                {
+                  "label": "8x",
+                  "value": "8"
+                },
+                {
+                  "label": "16x",
+                  "value": "16"
+                }
+              ]
+            },
+            {
+              "key": "reicast_texture_filtering",
+              "label": "settings_flycast_texture_filtering",
+              "type": "enum",
+              "default": "0",
+              "choices": [
+                {
+                  "label": "Default",
+                  "value": "0"
+                },
+                {
+                  "label": "Nearest-Neighbor",
+                  "value": "1"
+                },
+                {
+                  "label": "Linear",
+                  "value": "2"
+                }
+              ]
+            },
+            {
+              "key": "reicast_emulate_framebuffer",
+              "label": "settings_flycast_emulate_framebuffer",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_enable_rttb",
+              "label": "settings_flycast_enable_rttb",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_pvr2_filtering",
+              "label": "settings_flycast_pvr2_filtering",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_native_depth_interpolation",
+              "label": "settings_flycast_native_depth_interp",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_fix_upscale_bleeding_edge",
+              "label": "settings_flycast_fix_upscale_bleeding",
+              "type": "bool",
+              "default": "enabled"
+            },
+            {
+              "key": "reicast_texupscale",
+              "label": "settings_flycast_texture_upscaling",
+              "type": "enum",
+              "default": "1",
+              "choices": [
+                {
+                  "label": "Off",
+                  "value": "1"
+                },
+                {
+                  "label": "2x",
+                  "value": "2"
+                },
+                {
+                  "label": "4x",
+                  "value": "4"
+                },
+                {
+                  "label": "6x",
+                  "value": "6"
+                }
+              ]
+            },
+            {
+              "key": "reicast_texupscale_max_filtered_texture_size",
+              "label": "settings_flycast_max_upscale_size",
+              "type": "enum",
+              "default": "256",
+              "choices": [
+                {
+                  "label": "256",
+                  "value": "256"
+                },
+                {
+                  "label": "512",
+                  "value": "512"
+                },
+                {
+                  "label": "1024",
+                  "value": "1024"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "settings_flycast_tab_display",
+      "sections": [
+        {
+          "title": "settings_flycast_section_display",
+          "options": [
+            {
+              "key": "display_mode",
+              "label": "settings_flycast_display_mode",
+              "type": "enum",
+              "default": "Display",
+              "choices": [
+                {
+                  "label": "Integer",
+                  "value": "Integer"
+                },
+                {
+                  "label": "Display",
+                  "value": "Display"
+                }
+              ]
+            },
+            {
+              "key": "display_size",
+              "label": "settings_flycast_size",
+              "type": "enum",
+              "default": "4:3",
+              "choices": [
+                {
+                  "label": "Stretch",
+                  "value": "Stretch"
+                },
+                {
+                  "label": "4:3",
+                  "value": "4:3"
+                },
+                {
+                  "label": "16:9",
+                  "value": "16:9"
+                },
+                {
+                  "label": "Original",
+                  "value": "Original"
+                },
+                {
+                  "label": "1x",
+                  "value": "1x"
+                },
+                {
+                  "label": "2x",
+                  "value": "2x"
+                },
+                {
+                  "label": "Auto",
+                  "value": "Auto"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "settings_flycast_tab_performance",
+      "sections": [
+        {
+          "title": "settings_flycast_section_performance",
+          "options": [
+            {
+              "key": "reicast_threaded_rendering",
+              "label": "settings_flycast_threaded_rendering",
+              "type": "bool",
+              "default": "enabled"
+            },
+            {
+              "key": "reicast_auto_skip_frame",
+              "label": "settings_flycast_auto_skip_frame",
+              "type": "enum",
+              "default": "disabled",
+              "choices": [
+                {
+                  "label": "Disabled",
+                  "value": "disabled"
+                },
+                {
+                  "label": "Normal",
+                  "value": "some"
+                },
+                {
+                  "label": "Maximum",
+                  "value": "more"
+                }
+              ]
+            },
+            {
+              "key": "reicast_delay_frame_swapping",
+              "label": "settings_flycast_delay_frame_swapping",
+              "type": "bool",
+              "default": "enabled"
+            },
+            {
+              "key": "reicast_frame_skipping",
+              "label": "settings_flycast_frame_skipping",
+              "type": "enum",
+              "default": "disabled",
+              "choices": [
+                {
+                  "label": "Disabled",
+                  "value": "disabled"
+                },
+                {
+                  "label": "1",
+                  "value": "1"
+                },
+                {
+                  "label": "2",
+                  "value": "2"
+                },
+                {
+                  "label": "3",
+                  "value": "3"
+                },
+                {
+                  "label": "4",
+                  "value": "4"
+                },
+                {
+                  "label": "5",
+                  "value": "5"
+                },
+                {
+                  "label": "6",
+                  "value": "6"
+                }
+              ]
+            },
+            {
+              "key": "reicast_sh4clock",
+              "label": "settings_flycast_sh4_clock",
+              "type": "enum",
+              "default": "200",
+              "choices": [
+                {
+                  "label": "100",
+                  "value": "100"
+                },
+                {
+                  "label": "110",
+                  "value": "110"
+                },
+                {
+                  "label": "120",
+                  "value": "120"
+                },
+                {
+                  "label": "130",
+                  "value": "130"
+                },
+                {
+                  "label": "140",
+                  "value": "140"
+                },
+                {
+                  "label": "150",
+                  "value": "150"
+                },
+                {
+                  "label": "160",
+                  "value": "160"
+                },
+                {
+                  "label": "170",
+                  "value": "170"
+                },
+                {
+                  "label": "180",
+                  "value": "180"
+                },
+                {
+                  "label": "190",
+                  "value": "190"
+                },
+                {
+                  "label": "200",
+                  "value": "200"
+                },
+                {
+                  "label": "210",
+                  "value": "210"
+                },
+                {
+                  "label": "220",
+                  "value": "220"
+                },
+                {
+                  "label": "230",
+                  "value": "230"
+                },
+                {
+                  "label": "240",
+                  "value": "240"
+                },
+                {
+                  "label": "250",
+                  "value": "250"
+                },
+                {
+                  "label": "260",
+                  "value": "260"
+                },
+                {
+                  "label": "270",
+                  "value": "270"
+                },
+                {
+                  "label": "280",
+                  "value": "280"
+                },
+                {
+                  "label": "290",
+                  "value": "290"
+                },
+                {
+                  "label": "300",
+                  "value": "300"
+                },
+                {
+                  "label": "310",
+                  "value": "310"
+                },
+                {
+                  "label": "320",
+                  "value": "320"
+                },
+                {
+                  "label": "330",
+                  "value": "330"
+                },
+                {
+                  "label": "340",
+                  "value": "340"
+                },
+                {
+                  "label": "350",
+                  "value": "350"
+                },
+                {
+                  "label": "360",
+                  "value": "360"
+                },
+                {
+                  "label": "370",
+                  "value": "370"
+                },
+                {
+                  "label": "380",
+                  "value": "380"
+                },
+                {
+                  "label": "390",
+                  "value": "390"
+                },
+                {
+                  "label": "400",
+                  "value": "400"
+                },
+                {
+                  "label": "410",
+                  "value": "410"
+                },
+                {
+                  "label": "420",
+                  "value": "420"
+                },
+                {
+                  "label": "430",
+                  "value": "430"
+                },
+                {
+                  "label": "440",
+                  "value": "440"
+                },
+                {
+                  "label": "450",
+                  "value": "450"
+                },
+                {
+                  "label": "460",
+                  "value": "460"
+                },
+                {
+                  "label": "470",
+                  "value": "470"
+                },
+                {
+                  "label": "480",
+                  "value": "480"
+                },
+                {
+                  "label": "490",
+                  "value": "490"
+                },
+                {
+                  "label": "500",
+                  "value": "500"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "settings_flycast_tab_hacks",
+      "sections": [
+        {
+          "title": "settings_flycast_section_hacks",
+          "options": [
+            {
+              "key": "reicast_widescreen_cheats",
+              "label": "settings_flycast_widescreen_cheats",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_widescreen_hack",
+              "label": "settings_flycast_widescreen_hack",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_gdrom_fast_loading",
+              "label": "settings_flycast_gd_rom_fast_loading",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_dc_32mb_mod",
+              "label": "settings_flycast_32mb_ram",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_custom_textures",
+              "label": "settings_flycast_custom_textures",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_dump_textures",
+              "label": "settings_flycast_dump_textures",
+              "type": "bool",
+              "default": "disabled"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "settings_flycast_tab_input",
+      "sections": [
+        {
+          "title": "settings_flycast_section_input",
+          "options": [
+            {
+              "key": "reicast_analog_stick_deadzone",
+              "label": "settings_flycast_analog_deadzone",
+              "type": "enum",
+              "default": "15%",
+              "choices": [
+                {
+                  "label": "0%",
+                  "value": "0%"
+                },
+                {
+                  "label": "5%",
+                  "value": "5%"
+                },
+                {
+                  "label": "10%",
+                  "value": "10%"
+                },
+                {
+                  "label": "15%",
+                  "value": "15%"
+                },
+                {
+                  "label": "20%",
+                  "value": "20%"
+                },
+                {
+                  "label": "25%",
+                  "value": "25%"
+                },
+                {
+                  "label": "30%",
+                  "value": "30%"
+                }
+              ]
+            },
+            {
+              "key": "reicast_trigger_deadzone",
+              "label": "settings_flycast_trigger_deadzone",
+              "type": "enum",
+              "default": "0%",
+              "choices": [
+                {
+                  "label": "0%",
+                  "value": "0%"
+                },
+                {
+                  "label": "5%",
+                  "value": "5%"
+                },
+                {
+                  "label": "10%",
+                  "value": "10%"
+                },
+                {
+                  "label": "15%",
+                  "value": "15%"
+                },
+                {
+                  "label": "20%",
+                  "value": "20%"
+                },
+                {
+                  "label": "25%",
+                  "value": "25%"
+                },
+                {
+                  "label": "30%",
+                  "value": "30%"
+                }
+              ]
+            },
+            {
+              "key": "reicast_digital_triggers",
+              "label": "settings_flycast_digital_triggers",
+              "type": "bool",
+              "default": "disabled"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "settings_flycast_tab_vmu",
+      "sections": [
+        {
+          "title": "settings_flycast_section_general",
+          "options": [
+            {
+              "key": "reicast_per_content_vmus",
+              "label": "settings_flycast_per_game_vmus",
+              "type": "enum",
+              "default": "All VMUs",
+              "choices": [
+                {
+                  "label": "Disabled",
+                  "value": "disabled"
+                },
+                {
+                  "label": "VMU A1",
+                  "value": "VMU A1"
+                },
+                {
+                  "label": "All VMUs",
+                  "value": "All VMUs"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu_sound",
+              "label": "settings_flycast_vmu_sound",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_show_vmu_screen_settings",
+              "label": "settings_flycast_show_screen_settings",
+              "type": "bool",
+              "default": "disabled"
+            }
+          ]
+        },
+        {
+          "title": "settings_flycast_section_vmu_1",
+          "options": [
+            {
+              "key": "reicast_vmu1_screen_display",
+              "label": "settings_flycast_display",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_vmu1_screen_position",
+              "label": "settings_flycast_position",
+              "type": "enum",
+              "default": "Upper Left",
+              "choices": [
+                {
+                  "label": "Upper Left",
+                  "value": "Upper Left"
+                },
+                {
+                  "label": "Upper Right",
+                  "value": "Upper Right"
+                },
+                {
+                  "label": "Lower Left",
+                  "value": "Lower Left"
+                },
+                {
+                  "label": "Lower Right",
+                  "value": "Lower Right"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu1_screen_size_mult",
+              "label": "settings_flycast_size",
+              "type": "enum",
+              "default": "1x",
+              "choices": [
+                {
+                  "label": "1x",
+                  "value": "1x"
+                },
+                {
+                  "label": "2x",
+                  "value": "2x"
+                },
+                {
+                  "label": "3x",
+                  "value": "3x"
+                },
+                {
+                  "label": "4x",
+                  "value": "4x"
+                },
+                {
+                  "label": "5x",
+                  "value": "5x"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu1_pixel_on_color",
+              "label": "settings_flycast_pixel_on_color",
+              "type": "enum",
+              "default": "DEFAULT_ON 00",
+              "choices": [
+                {
+                  "label": "Default ON",
+                  "value": "DEFAULT_ON 00"
+                },
+                {
+                  "label": "Default OFF",
+                  "value": "DEFAULT_OFF 01"
+                },
+                {
+                  "label": "Black",
+                  "value": "BLACK 02"
+                },
+                {
+                  "label": "Blue",
+                  "value": "BLUE 03"
+                },
+                {
+                  "label": "Green",
+                  "value": "GREEN 05"
+                },
+                {
+                  "label": "Cyan",
+                  "value": "CYAN 06"
+                },
+                {
+                  "label": "Red",
+                  "value": "RED 11"
+                },
+                {
+                  "label": "Purple",
+                  "value": "PURPLE 12"
+                },
+                {
+                  "label": "Yellow",
+                  "value": "YELLOW 14"
+                },
+                {
+                  "label": "White",
+                  "value": "WHITE 28"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu1_pixel_off_color",
+              "label": "settings_flycast_pixel_off_color",
+              "type": "enum",
+              "default": "DEFAULT_OFF 01",
+              "choices": [
+                {
+                  "label": "Default ON",
+                  "value": "DEFAULT_ON 00"
+                },
+                {
+                  "label": "Default OFF",
+                  "value": "DEFAULT_OFF 01"
+                },
+                {
+                  "label": "Black",
+                  "value": "BLACK 02"
+                },
+                {
+                  "label": "Blue",
+                  "value": "BLUE 03"
+                },
+                {
+                  "label": "Green",
+                  "value": "GREEN 05"
+                },
+                {
+                  "label": "Cyan",
+                  "value": "CYAN 06"
+                },
+                {
+                  "label": "Red",
+                  "value": "RED 11"
+                },
+                {
+                  "label": "Purple",
+                  "value": "PURPLE 12"
+                },
+                {
+                  "label": "Yellow",
+                  "value": "YELLOW 14"
+                },
+                {
+                  "label": "White",
+                  "value": "WHITE 28"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu1_screen_opacity",
+              "label": "settings_flycast_opacity",
+              "type": "enum",
+              "default": "100%",
+              "choices": [
+                {
+                  "label": "10%",
+                  "value": "10%"
+                },
+                {
+                  "label": "20%",
+                  "value": "20%"
+                },
+                {
+                  "label": "30%",
+                  "value": "30%"
+                },
+                {
+                  "label": "40%",
+                  "value": "40%"
+                },
+                {
+                  "label": "50%",
+                  "value": "50%"
+                },
+                {
+                  "label": "60%",
+                  "value": "60%"
+                },
+                {
+                  "label": "70%",
+                  "value": "70%"
+                },
+                {
+                  "label": "80%",
+                  "value": "80%"
+                },
+                {
+                  "label": "90%",
+                  "value": "90%"
+                },
+                {
+                  "label": "100%",
+                  "value": "100%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "settings_flycast_section_vmu_2",
+          "options": [
+            {
+              "key": "reicast_vmu2_screen_display",
+              "label": "settings_flycast_display",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_vmu2_screen_position",
+              "label": "settings_flycast_position",
+              "type": "enum",
+              "default": "Upper Right",
+              "choices": [
+                {
+                  "label": "Upper Left",
+                  "value": "Upper Left"
+                },
+                {
+                  "label": "Upper Right",
+                  "value": "Upper Right"
+                },
+                {
+                  "label": "Lower Left",
+                  "value": "Lower Left"
+                },
+                {
+                  "label": "Lower Right",
+                  "value": "Lower Right"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu2_screen_size_mult",
+              "label": "settings_flycast_size",
+              "type": "enum",
+              "default": "1x",
+              "choices": [
+                {
+                  "label": "1x",
+                  "value": "1x"
+                },
+                {
+                  "label": "2x",
+                  "value": "2x"
+                },
+                {
+                  "label": "3x",
+                  "value": "3x"
+                },
+                {
+                  "label": "4x",
+                  "value": "4x"
+                },
+                {
+                  "label": "5x",
+                  "value": "5x"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu2_pixel_on_color",
+              "label": "settings_flycast_pixel_on_color",
+              "type": "enum",
+              "default": "DEFAULT_ON 00",
+              "choices": [
+                {
+                  "label": "Default ON",
+                  "value": "DEFAULT_ON 00"
+                },
+                {
+                  "label": "Default OFF",
+                  "value": "DEFAULT_OFF 01"
+                },
+                {
+                  "label": "Black",
+                  "value": "BLACK 02"
+                },
+                {
+                  "label": "Blue",
+                  "value": "BLUE 03"
+                },
+                {
+                  "label": "Green",
+                  "value": "GREEN 05"
+                },
+                {
+                  "label": "Cyan",
+                  "value": "CYAN 06"
+                },
+                {
+                  "label": "Red",
+                  "value": "RED 11"
+                },
+                {
+                  "label": "Purple",
+                  "value": "PURPLE 12"
+                },
+                {
+                  "label": "Yellow",
+                  "value": "YELLOW 14"
+                },
+                {
+                  "label": "White",
+                  "value": "WHITE 28"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu2_pixel_off_color",
+              "label": "settings_flycast_pixel_off_color",
+              "type": "enum",
+              "default": "DEFAULT_OFF 01",
+              "choices": [
+                {
+                  "label": "Default ON",
+                  "value": "DEFAULT_ON 00"
+                },
+                {
+                  "label": "Default OFF",
+                  "value": "DEFAULT_OFF 01"
+                },
+                {
+                  "label": "Black",
+                  "value": "BLACK 02"
+                },
+                {
+                  "label": "Blue",
+                  "value": "BLUE 03"
+                },
+                {
+                  "label": "Green",
+                  "value": "GREEN 05"
+                },
+                {
+                  "label": "Cyan",
+                  "value": "CYAN 06"
+                },
+                {
+                  "label": "Red",
+                  "value": "RED 11"
+                },
+                {
+                  "label": "Purple",
+                  "value": "PURPLE 12"
+                },
+                {
+                  "label": "Yellow",
+                  "value": "YELLOW 14"
+                },
+                {
+                  "label": "White",
+                  "value": "WHITE 28"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu2_screen_opacity",
+              "label": "settings_flycast_opacity",
+              "type": "enum",
+              "default": "100%",
+              "choices": [
+                {
+                  "label": "10%",
+                  "value": "10%"
+                },
+                {
+                  "label": "20%",
+                  "value": "20%"
+                },
+                {
+                  "label": "30%",
+                  "value": "30%"
+                },
+                {
+                  "label": "40%",
+                  "value": "40%"
+                },
+                {
+                  "label": "50%",
+                  "value": "50%"
+                },
+                {
+                  "label": "60%",
+                  "value": "60%"
+                },
+                {
+                  "label": "70%",
+                  "value": "70%"
+                },
+                {
+                  "label": "80%",
+                  "value": "80%"
+                },
+                {
+                  "label": "90%",
+                  "value": "90%"
+                },
+                {
+                  "label": "100%",
+                  "value": "100%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "settings_flycast_section_vmu_3",
+          "options": [
+            {
+              "key": "reicast_vmu3_screen_display",
+              "label": "settings_flycast_display",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_vmu3_screen_position",
+              "label": "settings_flycast_position",
+              "type": "enum",
+              "default": "Lower Left",
+              "choices": [
+                {
+                  "label": "Upper Left",
+                  "value": "Upper Left"
+                },
+                {
+                  "label": "Upper Right",
+                  "value": "Upper Right"
+                },
+                {
+                  "label": "Lower Left",
+                  "value": "Lower Left"
+                },
+                {
+                  "label": "Lower Right",
+                  "value": "Lower Right"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu3_screen_size_mult",
+              "label": "settings_flycast_size",
+              "type": "enum",
+              "default": "1x",
+              "choices": [
+                {
+                  "label": "1x",
+                  "value": "1x"
+                },
+                {
+                  "label": "2x",
+                  "value": "2x"
+                },
+                {
+                  "label": "3x",
+                  "value": "3x"
+                },
+                {
+                  "label": "4x",
+                  "value": "4x"
+                },
+                {
+                  "label": "5x",
+                  "value": "5x"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu3_pixel_on_color",
+              "label": "settings_flycast_pixel_on_color",
+              "type": "enum",
+              "default": "DEFAULT_ON 00",
+              "choices": [
+                {
+                  "label": "Default ON",
+                  "value": "DEFAULT_ON 00"
+                },
+                {
+                  "label": "Default OFF",
+                  "value": "DEFAULT_OFF 01"
+                },
+                {
+                  "label": "Black",
+                  "value": "BLACK 02"
+                },
+                {
+                  "label": "Blue",
+                  "value": "BLUE 03"
+                },
+                {
+                  "label": "Green",
+                  "value": "GREEN 05"
+                },
+                {
+                  "label": "Cyan",
+                  "value": "CYAN 06"
+                },
+                {
+                  "label": "Red",
+                  "value": "RED 11"
+                },
+                {
+                  "label": "Purple",
+                  "value": "PURPLE 12"
+                },
+                {
+                  "label": "Yellow",
+                  "value": "YELLOW 14"
+                },
+                {
+                  "label": "White",
+                  "value": "WHITE 28"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu3_pixel_off_color",
+              "label": "settings_flycast_pixel_off_color",
+              "type": "enum",
+              "default": "DEFAULT_OFF 01",
+              "choices": [
+                {
+                  "label": "Default ON",
+                  "value": "DEFAULT_ON 00"
+                },
+                {
+                  "label": "Default OFF",
+                  "value": "DEFAULT_OFF 01"
+                },
+                {
+                  "label": "Black",
+                  "value": "BLACK 02"
+                },
+                {
+                  "label": "Blue",
+                  "value": "BLUE 03"
+                },
+                {
+                  "label": "Green",
+                  "value": "GREEN 05"
+                },
+                {
+                  "label": "Cyan",
+                  "value": "CYAN 06"
+                },
+                {
+                  "label": "Red",
+                  "value": "RED 11"
+                },
+                {
+                  "label": "Purple",
+                  "value": "PURPLE 12"
+                },
+                {
+                  "label": "Yellow",
+                  "value": "YELLOW 14"
+                },
+                {
+                  "label": "White",
+                  "value": "WHITE 28"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu3_screen_opacity",
+              "label": "settings_flycast_opacity",
+              "type": "enum",
+              "default": "100%",
+              "choices": [
+                {
+                  "label": "10%",
+                  "value": "10%"
+                },
+                {
+                  "label": "20%",
+                  "value": "20%"
+                },
+                {
+                  "label": "30%",
+                  "value": "30%"
+                },
+                {
+                  "label": "40%",
+                  "value": "40%"
+                },
+                {
+                  "label": "50%",
+                  "value": "50%"
+                },
+                {
+                  "label": "60%",
+                  "value": "60%"
+                },
+                {
+                  "label": "70%",
+                  "value": "70%"
+                },
+                {
+                  "label": "80%",
+                  "value": "80%"
+                },
+                {
+                  "label": "90%",
+                  "value": "90%"
+                },
+                {
+                  "label": "100%",
+                  "value": "100%"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "settings_flycast_section_vmu_4",
+          "options": [
+            {
+              "key": "reicast_vmu4_screen_display",
+              "label": "settings_flycast_display",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "reicast_vmu4_screen_position",
+              "label": "settings_flycast_position",
+              "type": "enum",
+              "default": "Lower Right",
+              "choices": [
+                {
+                  "label": "Upper Left",
+                  "value": "Upper Left"
+                },
+                {
+                  "label": "Upper Right",
+                  "value": "Upper Right"
+                },
+                {
+                  "label": "Lower Left",
+                  "value": "Lower Left"
+                },
+                {
+                  "label": "Lower Right",
+                  "value": "Lower Right"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu4_screen_size_mult",
+              "label": "settings_flycast_size",
+              "type": "enum",
+              "default": "1x",
+              "choices": [
+                {
+                  "label": "1x",
+                  "value": "1x"
+                },
+                {
+                  "label": "2x",
+                  "value": "2x"
+                },
+                {
+                  "label": "3x",
+                  "value": "3x"
+                },
+                {
+                  "label": "4x",
+                  "value": "4x"
+                },
+                {
+                  "label": "5x",
+                  "value": "5x"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu4_pixel_on_color",
+              "label": "settings_flycast_pixel_on_color",
+              "type": "enum",
+              "default": "DEFAULT_ON 00",
+              "choices": [
+                {
+                  "label": "Default ON",
+                  "value": "DEFAULT_ON 00"
+                },
+                {
+                  "label": "Default OFF",
+                  "value": "DEFAULT_OFF 01"
+                },
+                {
+                  "label": "Black",
+                  "value": "BLACK 02"
+                },
+                {
+                  "label": "Blue",
+                  "value": "BLUE 03"
+                },
+                {
+                  "label": "Green",
+                  "value": "GREEN 05"
+                },
+                {
+                  "label": "Cyan",
+                  "value": "CYAN 06"
+                },
+                {
+                  "label": "Red",
+                  "value": "RED 11"
+                },
+                {
+                  "label": "Purple",
+                  "value": "PURPLE 12"
+                },
+                {
+                  "label": "Yellow",
+                  "value": "YELLOW 14"
+                },
+                {
+                  "label": "White",
+                  "value": "WHITE 28"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu4_pixel_off_color",
+              "label": "settings_flycast_pixel_off_color",
+              "type": "enum",
+              "default": "DEFAULT_OFF 01",
+              "choices": [
+                {
+                  "label": "Default ON",
+                  "value": "DEFAULT_ON 00"
+                },
+                {
+                  "label": "Default OFF",
+                  "value": "DEFAULT_OFF 01"
+                },
+                {
+                  "label": "Black",
+                  "value": "BLACK 02"
+                },
+                {
+                  "label": "Blue",
+                  "value": "BLUE 03"
+                },
+                {
+                  "label": "Green",
+                  "value": "GREEN 05"
+                },
+                {
+                  "label": "Cyan",
+                  "value": "CYAN 06"
+                },
+                {
+                  "label": "Red",
+                  "value": "RED 11"
+                },
+                {
+                  "label": "Purple",
+                  "value": "PURPLE 12"
+                },
+                {
+                  "label": "Yellow",
+                  "value": "YELLOW 14"
+                },
+                {
+                  "label": "White",
+                  "value": "WHITE 28"
+                }
+              ]
+            },
+            {
+              "key": "reicast_vmu4_screen_opacity",
+              "label": "settings_flycast_opacity",
+              "type": "enum",
+              "default": "100%",
+              "choices": [
+                {
+                  "label": "10%",
+                  "value": "10%"
+                },
+                {
+                  "label": "20%",
+                  "value": "20%"
+                },
+                {
+                  "label": "30%",
+                  "value": "30%"
+                },
+                {
+                  "label": "40%",
+                  "value": "40%"
+                },
+                {
+                  "label": "50%",
+                  "value": "50%"
+                },
+                {
+                  "label": "60%",
+                  "value": "60%"
+                },
+                {
+                  "label": "70%",
+                  "value": "70%"
+                },
+                {
+                  "label": "80%",
+                  "value": "80%"
+                },
+                {
+                  "label": "90%",
+                  "value": "90%"
+                },
+                {
+                  "label": "100%",
+                  "value": "100%"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
