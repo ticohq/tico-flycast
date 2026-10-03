@@ -52,7 +52,6 @@
 #endif
 #include "vgamepad.h"
 #include "settings.h"
-#include "wsi/context.h"
 #include "oslib/i18n.h"
 #include "gui_font.h"
 using namespace i18n;
@@ -112,8 +111,6 @@ static void emuEventCallback(Event event, void *)
 	case Event::Terminate:
 		GamepadDevice::load_system_mappings();
 		game_started = false;
-		if (GraphicsContext::Instance() != nullptr)
-			GraphicsContext::Instance()->setSwapInterval(1);
 		break;
 	default:
 		break;
@@ -208,7 +205,17 @@ void gui_updateStyle()
 	uiThreadRunner.init();
 
 #if !defined(TARGET_UWP) && !defined(__SWITCH__)
-	settings.display.uiScale = std::max(1.f, settings.display.dpi / 100.f * 0.75f);
+	const float dpiScale = std::max(1.f, settings.display.dpi / 100.f * 0.75f);
+#if defined(__APPLE__) && !defined(TARGET_IPHONE)
+	if (settings.display.pointScale > 1.f)
+		// Match macOS point scaling for HiDPI modes.
+		settings.display.uiScale = std::max(settings.display.pointScale, dpiScale);
+	else
+		// Dense 1x modes get only a small physical-DPI boost.
+		settings.display.uiScale = 1.f + (dpiScale - 1.f) * 0.15f;
+#else
+	settings.display.uiScale = dpiScale;
+#endif
    	// Limit scaling on small low-res screens
     if (settings.display.width <= 640 || settings.display.height <= 480)
     	settings.display.uiScale = std::min(1.2f, settings.display.uiScale);
@@ -231,7 +238,7 @@ void gui_updateStyle()
 #if defined(__ANDROID__) || defined(TARGET_IPHONE) || defined(__SWITCH__)
     ImGui::GetStyle().TouchExtraPadding = ImVec2(1, 1);	// from 0,0
 #endif
-	if (settings.display.uiScale > 1)
+	if (settings.display.uiScale != 1.f)
 		ImGui::GetStyle().ScaleAllSizes(settings.display.uiScale);
 	
 	gui_loadFonts();
@@ -549,13 +556,15 @@ static void gui_display_commands()
 		ImGui::SameLine();
 		if (!lowHeight)
 		{
-			ImGui::BeginChild("game_info", ScaledVec2(0, 100.f), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+			ImGui::BeginChild("game_info", ScaledVec2(0, 100.f), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar);
 			ImGui::PushFont(nullptr, uiLargeFontSize());
 			ImGui::Text("%s", art.name.c_str());
 			ImGui::PopFont();
 			{
 				ImguiStyleColor _(ImGuiCol_Text, ImVec4(0.75f, 0.75f, 0.75f, 1.f));
 				ImGui::TextWrapped("%s", art.fileName.c_str());
+				if (!art.arcade && !art.uniqueId.empty())
+					ImGui::Text(T("UID: %s"), art.uniqueId.c_str());
 			}
 			ImGui::EndChild();
 		}
@@ -967,13 +976,14 @@ static void gui_display_content()
 						if (counter % itemsPerLine != 0)
 							ImGui::SameLine();
 						counter++;
-						// Put the image inside a child window so we can detect when it's fully clipped and doesn't need to be loaded
-						if (ImGui::BeginChild("img", ImVec2(0, 0), ImGuiChildFlags_AutoResizeX | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_NavFlattened))
+						if (ImGui::IsRectVisible(responsiveBoxVec2))
 						{
 							ImguiFileTexture tex(art.boxartPath);
 							pressed = gameImageButton(tex, game.name, responsiveBoxVec2, gameName);
 						}
-						ImGui::EndChild();
+						else {
+							ImGui::Dummy(responsiveBoxVec2);
+						}
 					}
 					else
 					{
@@ -1115,7 +1125,7 @@ static void gui_network_start()
 {
 	drawBoxartBackground();
 	centerNextWindow();
-	ImGui::SetNextWindowSize(ScaledVec2(330, 0));
+	ImGui::SetNextWindowSize(ScaledVec2(360, 0));
 	ImGui::SetNextWindowBgAlpha(0.8f);
 	ImguiStyleVar _1(ImGuiStyleVar_WindowPadding, ScaledVec2(20, 20));
 
@@ -1146,8 +1156,20 @@ static void gui_network_start()
 		ImGui::Text("%s", get_notification().c_str());
 
 		float currentwidth = ImGui::GetContentRegionAvail().x;
-		ImGui::SetCursorPosX((currentwidth - uiScaled(100.f)) / 2.f + ImGui::GetStyle().WindowPadding.x);
-		if (ImGui::Button(T("Cancel"), ScaledVec2(100.f, 0)) && NetworkHandshake::instance != nullptr)
+		float buttonWidth = ImGui::CalcTextSize(T("Cancel")).x + ImGui::GetStyle().FramePadding.x * 2;
+		if (NetworkHandshake::instance != nullptr && NetworkHandshake::instance->canStartNow() && gui_state != GuiState::Closed)
+		{
+			float startWidth = ImGui::CalcTextSize(T("Start Now")).x + ImGui::GetStyle().FramePadding.x * 2;
+			buttonWidth = std::max(buttonWidth, startWidth);
+			ImGui::SetCursorPosX((currentwidth - buttonWidth * 2 - ImGui::GetStyle().ItemSpacing.x) / 2.f + ImGui::GetStyle().WindowPadding.x);
+			if (ImGui::Button(T("Start Now"), ScaledVec2(buttonWidth, 0)) && NetworkHandshake::instance != nullptr)
+				NetworkHandshake::instance->startNow();
+			ImGui::SameLine();
+		}
+		else {
+			ImGui::SetCursorPosX((currentwidth - buttonWidth) / 2.f + ImGui::GetStyle().WindowPadding.x);
+		}
+		if (ImGui::Button(T("Cancel"), ScaledVec2(buttonWidth, 0)) && NetworkHandshake::instance != nullptr)
 		{
 			NetworkHandshake::instance->stop();
 			try {

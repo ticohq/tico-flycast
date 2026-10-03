@@ -22,8 +22,38 @@
 #include "types.h"
 #include "context.h"
 
-#if defined(USE_OPENGL) && !defined(LIBRETRO) && !defined(TARGET_IPHONE)
-	#include <glad/gl.h>
+#if defined(TARGET_IPHONE)
+#include <OpenGLES/ES3/gl.h>
+#include <OpenGLES/ES3/glext.h>
+#endif
+
+#if defined(LIBRETRO)
+#include <libretro.h>
+#include <glsm/glsm.h>
+#include <glsm/glsmsym.h>
+
+#ifndef GL_MAJOR_VERSION
+#define GL_MAJOR_VERSION                  0x821B
+#endif
+#ifndef GL_MINOR_VERSION
+#define GL_MINOR_VERSION                  0x821C
+#endif
+
+#ifndef GL_DEBUG_SEVERITY_NOTIFICATION
+#define GL_DEBUG_SEVERITY_NOTIFICATION    0x826B
+#endif
+#ifndef GL_DEBUG_SEVERITY_HIGH
+#define GL_DEBUG_SEVERITY_HIGH            0x9146
+#endif
+#ifndef GL_DEBUG_SEVERITY_MEDIUM
+#define GL_DEBUG_SEVERITY_MEDIUM          0x9147
+#endif
+#ifndef GL_DEBUG_SEVERITY_LOW
+#define GL_DEBUG_SEVERITY_LOW             0x9148
+#endif
+
+#elif defined(USE_OPENGL) && !defined(TARGET_IPHONE)
+#include <glad/gl.h>
 #endif
 
 #ifdef TEST_AUTOMATION
@@ -35,6 +65,7 @@ static inline void do_swap_automation() {}
 class GLGraphicsContext : public GraphicsContext
 {
 public:
+	virtual void swap() = 0;
 	int getMajorVersion() const {
 		return majorVersion;
 	}
@@ -63,7 +94,14 @@ public:
 	}
 	void setSwapInterval(int interval) override;
 
+	static GLGraphicsContext *Instance() {
+		return static_cast<GLGraphicsContext*>(GraphicsContext::Instance());
+	}
+	static void Create(void *window, void *display = nullptr);
+
 protected:
+	GLGraphicsContext(void *window, void *display)
+		: GraphicsContext(window, display) {}
 	void postInit();
 	void preTerm();
 	void findGLVersion();
@@ -79,25 +117,3 @@ private:
 	std::string driverVersion;
 	bool amd = false;
 };
-
-#if defined(LIBRETRO)
-
-#include "libretro.h"
-
-#elif defined(TARGET_IPHONE)
-
-#include "osx.h"
-
-#elif defined(USE_SDL)
-
-#include "sdl.h"
-
-#elif defined(__ANDROID__) || defined(SUPPORT_X11)
-
-#include "egl.h"
-
-#else
-
-#error Unsupported window system
-
-#endif

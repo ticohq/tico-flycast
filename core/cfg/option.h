@@ -476,6 +476,7 @@ extern Option<bool> NativeDepthInterpolation;
 extern Option<bool> EmulateFramebuffer;
 extern Option<bool> FixUpscaleBleedingEdge;
 extern Option<bool> CustomGpuDriver;
+extern Option<bool> FramePacing;
 #ifdef VIDEO_ROUTING
 extern Option<bool, false> VideoRouting;
 extern Option<bool, false> VideoRoutingScale;
@@ -523,6 +524,7 @@ extern Option<float> ProfilerFrameWarningTime;
 
 extern Option<bool> NetworkEnable;
 extern Option<bool> ActAsServer;
+extern Option<bool> NaomiSatellite;
 extern OptionString DNS;
 extern OptionString NetworkServer;
 extern Option<int> LocalPort;
@@ -572,5 +574,6 @@ extern Option<bool> EnableAchievements;
 extern Option<bool> AchievementsHardcoreMode;
 extern OptionString AchievementsUserName;
 extern OptionString AchievementsToken;
+extern OptionString AchievementsHostUrl;
 
 } // namespace config
