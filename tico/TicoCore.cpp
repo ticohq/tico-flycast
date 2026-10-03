@@ -1501,6 +1501,15 @@ void TicoCore::LoadConfig()
     LOG_CORE("Loaded %lu options from %s", m_configOptions.size(), configPath);
 }
 
+void TicoCore::SetOption(const std::string &key, const std::string &value)
+{
+    std::string &stored = m_configOptions[key];
+    if (stored == value)
+        return;
+    stored = value;
+    m_variablesUpdated = true;
+}
+
 std::string TicoCore::GetConfigValue(const std::string &key, const std::string &defaultVal)
 {
     auto it = m_configOptions.find(key);

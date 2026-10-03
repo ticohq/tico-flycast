@@ -122,9 +122,4 @@ private:
     uint64_t prevButtons_[MaxPlayers] = {};
 };
 
-/// Overlay font/scale factor for the current Switch operation mode (handheld
-/// vs docked). A platform-display helper the runtimes call when sizing the
-/// overlay.
-float OverlayModeScale();
-
 }  // namespace Tico

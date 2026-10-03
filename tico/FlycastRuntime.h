@@ -14,9 +14,9 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 class TicoCore;
-class TicoOverlay;
 class TicoAudio;
 
 namespace Tico
@@ -48,10 +48,18 @@ private:
     void ShutdownOverlay();
     void RenderOverlayFrame(float deltaTime);
     void ApplyCoreInput(const FrameInput &input);
+    void OpenMenu();
+    void CloseMenu();
+    /// Feeds the open menu; returns false when the menu is closed.
+    bool FeedMenu(const FrameInput &input);
+    /// Carries out what the menu chose on the last built frame.
+    void RunMenuAction();
+    void ApplySettingsToCore();
+    void UpdateGameViewport();
+    void UpdateHud(float deltaTime);
 
     LogCallback log_;
     std::unique_ptr<TicoCore> core_;
-    std::unique_ptr<TicoOverlay> overlay_;
     std::unique_ptr<FlycastOverlayHost> overlayHost_;
     std::unique_ptr<TicoAudio> audio_;
     SDL_AudioDeviceID audioDevice_ = 0;
@@ -64,7 +72,19 @@ private:
     std::string titleArg_;     // Display title from the launcher (argv[2])
     bool isArcade_ = false;    // NAOMI / Atomiswave (directionals -> analog axis)
     uint32_t lastTicks_ = 0;
-    float overlayBaseFontScale_ = 1.0f;
+
+    // Quick menu
+    bool menuOpen_ = false;
+    std::vector<std::string> discPaths_;   // Change Disc rows, in menu order
+    uint64_t navHeldPrev_ = 0;             // directional hold-repeat
+    int navRepeatFrames_ = 0;
+    static constexpr int kNavInitialDelayFrames = 14;
+    static constexpr int kNavRepeatFrames = 6;
+
+    // HUD frame counter
+    int hudFrames_ = 0;
+    float hudSeconds_ = 0.0f;
+    float hudFps_ = 0.0f;
 };
 
 }  // namespace Tico

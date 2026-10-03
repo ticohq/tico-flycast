@@ -60,15 +60,6 @@ uint64_t MapButtons(u64 hid)
 
 }  // namespace
 
-float OverlayModeScale()
-{
-#ifdef __SWITCH__
-    return appletGetOperationMode() == AppletOperationMode_Handheld ? 1.5f : 1.0f;
-#else
-    return 1.0f;
-#endif
-}
-
 Main::Main(CoreRuntime &runtime, LogCallback log)
     : runtime_(runtime), log_(std::move(log))
 {

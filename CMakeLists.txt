@@ -207,10 +207,14 @@ if(NINTENDO_SWITCH)
 				tico/FlycastRuntime.cpp
 				tico/TicoChainload.cpp
 				tico/TicoCore.cpp
-				tico/TicoOverlay.cpp
 				tico/TicoVulkan.cpp
-				tico/TicoTranslationManager.cpp
 				tico/TicoStubs.cpp
+				tico/FlycastDiscs.cpp
+				tico/overlay/imgui_overlay.cpp
+				tico/overlay/overlay_ui.cpp
+				tico/overlay/ra_alerts.cpp
+				tico/overlay/tico_config.cpp
+				tico/overlay/translation_manager.cpp
 				core/emulator.cpp
 				shell/libretro/audiostream.cpp
 				shell/switch/libnx_vmem.cpp
@@ -1643,6 +1647,8 @@ if(NINTENDO_SWITCH)
 			file(COPY "${CMAKE_SOURCE_DIR}/tico/fonts" DESTINATION ${ROMFS_DIR})
 			file(COPY "${CMAKE_SOURCE_DIR}/tico/lang" DESTINATION ${ROMFS_DIR})
 			file(COPY "${CMAKE_SOURCE_DIR}/tico/assets" DESTINATION ${ROMFS_DIR})
+			# the overlay builds its settings menu from the module's own definition
+			file(COPY "${CMAKE_SOURCE_DIR}/tico/module/settings.json" DESTINATION "${ROMFS_DIR}/module")
 			
 			nx_generate_nacp(tico-flycast.nacp NAME "Flycast" AUTHOR "ticoverse.com" VERSION "2.0.0")
 			nx_create_nro(${PROJECT_NAME} NACP tico-flycast.nacp ICON "${CMAKE_SOURCE_DIR}/shell/switch/flycast.jpeg" ROMFS ${ROMFS_DIR})
