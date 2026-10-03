@@ -142,8 +142,12 @@ std::string getShaderCachePath(const std::string& filename)
 
 std::string getTextureLoadPath(const std::string& gameId)
 {
+#ifdef USE_TICO
+	return std::string(game_dir_no_slash) + "/textures/" + gameId + PATH_DEFAULT_SLASH();
+#else
 	return std::string(retro_get_system_directory()) + "/dc/textures/"
 						+ gameId + PATH_DEFAULT_SLASH();
+#endif
 }
 
 std::string getTextureDumpPath()
@@ -155,7 +159,11 @@ std::string getTextureDumpPath()
 std::string getScreenshotsPath()
 {
 	// Unfortunately retroarch doesn't expose its "screenshots" path
+#ifdef USE_TICO
+	return std::string(game_dir_no_slash);
+#else
 	return std::string(retro_get_system_directory()) + "/dc";
+#endif
 }
 
 void saveScreenshot(const std::string& name, const std::vector<u8>& data)

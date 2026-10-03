@@ -435,7 +435,7 @@ void SetSlug(const std::string &launchSlug, const std::string &romPath)
 
 const std::string &Slug() { return s_slug; }
 
-std::string SystemPath() { return ContentRoot("tico_system_path", "sdmc:/tico/system/"); }
+std::string SystemPath() { return ContentRoot("tico_system_path", "sdmc:/tico/system/") + "flycast/"; }
 std::string SavesPath() { return ContentRoot("tico_saves_path", "sdmc:/tico/saves/") + s_slug + "/"; }
 std::string StatesPath() { return ContentRoot("tico_states_path", "sdmc:/tico/states/") + s_slug + "/"; }
 
@@ -460,6 +460,7 @@ TicoCore::TicoCore()
     m_systemDir = TicoConfig::SystemPath();
     m_saveDir = TicoConfig::SavesPath();
     TicoConfig::MakeDirs(m_saveDir);
+    TicoConfig::MakeDirs(m_systemDir);
 
     // Per-game VMUs (overridable in flycast_settings.json). The core persists
     // them in retro_load/unload_game, so we don't do manual SRAM handling.
