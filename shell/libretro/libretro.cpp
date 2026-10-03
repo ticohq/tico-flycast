@@ -2242,8 +2242,17 @@ bool retro_load_game(const struct retro_game_info *game)
 	if (!(environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &dir) && dir))
 		dir = game_dir;
 
+#ifdef USE_TICO
+	// tico passes the module's BIOS directory itself (<system>/flycast/),
+	// the same one its BIOS check reads, so don't nest dc/ under it.
+	snprintf(game_dir_no_slash, sizeof(game_dir_no_slash), "%s", dir);
+	for (size_t len = strlen(game_dir_no_slash); len > 1 && (game_dir_no_slash[len - 1] == '/' || game_dir_no_slash[len - 1] == '\\'); len--)
+		game_dir_no_slash[len - 1] = '\0';
+	snprintf(game_dir, sizeof(game_dir), "%s%c", game_dir_no_slash, slash);
+#else
 	snprintf(game_dir, sizeof(game_dir), "%s%cdc%c", dir, slash, slash);
 	snprintf(game_dir_no_slash, sizeof(game_dir_no_slash), "%s%cdc", dir, slash);
+#endif
 
 	// Per-content VMU additions START
 	// > Get save directory

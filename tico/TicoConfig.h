@@ -22,10 +22,9 @@ namespace TicoConfig {
     /// fall back to sdmc:/tico/<kind>/. Like tico's {saves}/{states}, the slug
     /// is appended to the saves and states roots.
     ///
-    /// SystemPath() is the system ROOT: Flycast's libretro shell appends its
-    /// own "dc/" (shell/libretro/libretro.cpp: game_dir = "<dir>/dc/") for
-    /// Dreamcast, NAOMI and Atomiswave alike, which matches the module's
-    /// system_dir "dc" -- BIOS resolves to <root>/dc/ either way.
+    /// SystemPath() is <system root>/flycast/, the module's system_dir shared
+    /// by Dreamcast, NAOMI and Atomiswave -- the folder tico's BIOS check reads.
+    /// Under USE_TICO the libretro shell uses it as-is instead of nesting dc/.
     std::string SystemPath();
     std::string SavesPath();
     std::string StatesPath();
