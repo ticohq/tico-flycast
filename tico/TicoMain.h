@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace Tico
 {
@@ -129,5 +130,13 @@ private:
     bool socketReady_ = false;
     uint64_t prevButtons_[MaxPlayers] = {};
 };
+
+/// What each player's port has, by its translated name ("" when nothing is
+/// connected): player 1 is the handheld or the first pad.
+std::vector<std::string> ControllerNames();
+
+/// The system's controller screen, where the players choose who is which
+/// (and connect more). False when it could not open.
+bool ShowControllerOrder();
 
 }  // namespace Tico

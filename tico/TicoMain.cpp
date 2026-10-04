@@ -4,6 +4,7 @@
 /// knows nothing about flycast/libretro/SDL. Mirrors tico-ppsspp's TicoMain.cpp.
 
 #include "TicoMain.h"
+#include "overlay/translation_manager.h"
 #include "UsbStorage.h"
 
 #include "TicoChainload.h"
@@ -240,6 +241,54 @@ void Main::Log(const char *fmt, ...) const
     vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
     log_(buffer);
+}
+
+std::vector<std::string> ControllerNames()
+{
+    std::vector<std::string> names(MaxPlayers);
+#ifdef __SWITCH__
+    auto name = [](u32 style) -> std::string {
+        const char *key = nullptr;
+        if (style & HidNpadStyleTag_NpadFullKey)
+            key = "emulator_pad_pro";
+        else if (style & HidNpadStyleTag_NpadHandheld)
+            key = "emulator_pad_handheld";
+        else if (style & HidNpadStyleTag_NpadJoyDual)
+            key = "emulator_pad_joycon_pair";
+        else if (style & HidNpadStyleTag_NpadJoyLeft)
+            key = "emulator_pad_joycon_left";
+        else if (style & HidNpadStyleTag_NpadJoyRight)
+            key = "emulator_pad_joycon_right";
+        else if (style & HidNpadStyleTag_NpadGc)
+            key = "emulator_pad_gamecube";
+        else if (style)
+            key = "emulator_pad_other";
+        return key ? SwitchFrontend::OverlayTranslation::tr(key) : std::string();
+    };
+    for (unsigned player = 0; player < MaxPlayers; ++player)
+    {
+        u32 style = hidGetNpadStyleSet(static_cast<HidNpadIdType>(HidNpadIdType_No1 + player));
+        // player 1 also reads the handheld Joy-Con (padInitializeDefault)
+        if (player == 0 && !style)
+            style = hidGetNpadStyleSet(HidNpadIdType_Handheld);
+        names[player] = name(style);
+    }
+#endif
+    return names;
+}
+
+bool ShowControllerOrder()
+{
+#ifdef __SWITCH__
+    HidLaControllerSupportArg arg;
+    hidLaCreateControllerSupportArg(&arg);
+    arg.hdr.player_count_min = 0;
+    arg.hdr.player_count_max = MaxPlayers;
+    HidLaControllerSupportResultInfo info{};
+    return R_SUCCEEDED(hidLaShowControllerSupport(&info, &arg));
+#else
+    return false;
+#endif
 }
 
 }  // namespace Tico

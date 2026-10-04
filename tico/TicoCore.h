@@ -71,6 +71,8 @@ public:
     int GetFBOWidth() const { return m_fboWidth; }
     int GetFBOHeight() const { return m_fboHeight; }
     double GetFPS() const { return m_fps; }
+    /// @brief Quarter turns counter-clockwise the frame is shown at (SET_ROTATION)
+    int GetRotation() const { return m_rotation; }
     bool IsHWRender() const { return m_hwRender; }
 
     /// @brief Get current game path
@@ -201,6 +203,7 @@ private:
 
     // RetroAchievements Client
     rc_client_t* m_rcClient = nullptr;
+    int m_rotation = 0;
     bool m_raEnabled = false;
     std::string m_raUsername = "";
     std::string m_raToken = "";

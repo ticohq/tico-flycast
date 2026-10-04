@@ -74,6 +74,7 @@ private:
     bool exitRequested_ = false;
     bool chainload_ = false;
     bool relaunch_ = false;   // Restart: start this NRO again on exit
+    bool biosMissing_ = false; // the game's BIOS is missing: only the notice runs
     bool standalone_ = false;  // started without a game: the library is the menu
     bool fromLibrary_ = false; // launched from the library: Exit goes back to it
     std::string argv0_;
