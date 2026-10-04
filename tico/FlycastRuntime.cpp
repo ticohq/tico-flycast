@@ -7,6 +7,9 @@
 
 #include "FlycastCheats.h"
 #include "FlycastDiscs.h"
+#include "FlycastLibrary.h"
+#include "FlycastShaders.h"
+#include "TicoChainload.h"
 #include "FlycastSaves.h"
 #include "TicoAudio.h"
 #include "TicoConfig.h"
@@ -353,7 +356,15 @@ static bool IsArcadePath(const std::string &path)
 
 bool FlycastRuntime::Configure(const LaunchInfo &launch)
 {
-    romPath_ = launch.contentPath.empty() ? TicoConfig::TEST_ROM : launch.contentPath;
+    // Without a game (e.g. from the homebrew menu) the library lists the ROM
+    // folders; a game picked there runs in a fresh launch of this NRO, marked
+    // --from-library so Exit Game comes back to the list.
+    romPath_ = launch.contentPath;
+    standalone_ = romPath_.empty();
+    argv0_ = launch.argc > 0 && launch.argv[0] ? launch.argv[0] : "";
+    for (int i = 1; i < launch.argc && launch.argv[i]; ++i)
+        if (std::string(launch.argv[i]) == "--from-library")
+            fromLibrary_ = true;
     titleArg_ = launch.title;
     TicoConfig::SetSlug(launch.argc > 3 && launch.argv[3] ? launch.argv[3] : "", romPath_);
     isArcade_ = IsArcadePath(romPath_);
@@ -440,6 +451,21 @@ bool FlycastRuntime::Initialize(const LaunchInfo &)
 bool FlycastRuntime::LoadContent(const std::string &path)
 {
     romPath_ = path.empty() ? romPath_ : path;
+    if (standalone_)
+    {
+        if (InitOverlay(std::string()))
+        {
+            FlycastLibrary::Register([this](const std::string &game, const std::string &slug) {
+                LaunchSelf(argv0_.c_str(), {game, std::string(), slug, "--from-library"}, log_);
+                exitRequested_ = true;
+            });
+            OverlayUI::SetGameTitle("Flycast");
+            OverlayUI::SetLibraryMode(true);
+            OpenMenu();
+        }
+        lastTicks_ = SDL_GetTicks();
+        return true;
+    }
     LOG_INFO("HOME", "Loading ROM: %s", romPath_.c_str());
 
     if (!core_->LoadGame(romPath_))
@@ -453,7 +479,10 @@ bool FlycastRuntime::LoadContent(const std::string &path)
         if (!InitOverlay(romPath_))
             LOG_WARN("HOME", "Overlay init failed; continuing without Tico overlay");
         else
+        {
+            FlycastShaders::Init(core_.get());
             offerResume_ = true;
+        }
     }
 
     lastTicks_ = SDL_GetTicks();
@@ -560,6 +589,7 @@ void FlycastRuntime::ShutdownOverlay()
         slotPictures_ = {}; // freed with the overlay's textures below
         OverlayUI::SetDiscCallback(nullptr);
         OverlayUI::SetCheatCallbacks(nullptr, nullptr);
+        FlycastLibrary::Unregister();
         ImGuiOverlay::Shutdown(); // frees textures via overlayHost_ (still alive)
     }
     overlayHost_.reset();
@@ -686,7 +716,10 @@ void FlycastRuntime::RunMenuAction()
     case Action::Exit:
         LOG_INFO("OVERLAY", "Exit requested");
         CloseMenu();
-        chainload_ = true;
+        if (fromLibrary_)
+            LaunchSelf(argv0_.c_str(), {}, log_); // back to the library
+        else if (!standalone_)
+            chainload_ = true; // the library itself just quits
         exitRequested_ = true;
         return;
     case Action::Restart:
@@ -894,6 +927,7 @@ void FlycastRuntime::HandleInput(const FrameInput &input)
 void FlycastRuntime::RunFrame()
 {
     UpdateScreenMode();
+    FlycastShaders::Update(); // a preset compiles outside the frame
     frameInFlight_ = TicoVulkan::BeginFrame();
     if (frameInFlight_ && core_)
     {
@@ -962,6 +996,7 @@ void FlycastRuntime::Shutdown()
     // Load State), whatever closed it: Exit, Restart or HOME
     if (overlayHost_ && overlayHost_->IsGameLoaded())
         overlayHost_->SaveStateSlot(OverlayUI::kAutoStateSlot - 1);
+    FlycastShaders::Shutdown();
     ShutdownOverlay();
     core_.reset();
     TicoVulkan::Shutdown();

@@ -66,4 +66,27 @@ void RelaunchSelf(int argc, char **argv, const LogCallback &log)
 #endif
 }
 
+void LaunchSelf(const char *argv0, const std::vector<std::string> &args, const LogCallback &log)
+{
+#ifdef __SWITCH__
+    if (!argv0 || !*argv0)
+        return;
+    // hbloader splits the argument string on spaces outside quotes
+    std::string line = "\"" + std::string(argv0) + "\"";
+    for (const std::string &arg : args)
+        line += " \"" + arg + "\"";
+    static char saved[2048]; // envSetNextLoad keeps the pointer until exit
+    std::snprintf(saved, sizeof(saved), "%s", line.c_str());
+    static char path[1024];
+    std::snprintf(path, sizeof(path), "%s", argv0);
+    envSetNextLoad(path, saved);
+    if (log)
+        log(std::string("Launching ") + line);
+#else
+    (void)argv0;
+    (void)args;
+    (void)log;
+#endif
+}
+
 }  // namespace Tico

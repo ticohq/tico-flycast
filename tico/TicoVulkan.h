@@ -14,6 +14,7 @@
 #include <libretro_vulkan.h>
 
 #include <array>
+#include <functional>
 #include <mutex>
 
 struct ImDrawData;
@@ -87,5 +88,85 @@ void DestroyOverlayTexture(ImTextureID texture);
 /// as tightly packed RGBA. False when there is no frame yet.
 bool CaptureGameImage(uint32_t maxWidth, uint32_t maxHeight, std::vector<uint8_t>& rgba,
                       uint32_t& width, uint32_t& height);
+
+// --- For the shader chain (TicoShaderChain/TicoSlang, shared with the other
+// cores' frontends): plain-Vulkan helpers on this device and queue. ---
+
+/// Upper bound on frame slots (one per swapchain image here); per-frame
+/// resources are allocated this many times and indexed by FrameIndex().
+constexpr uint32_t kFramesInFlight = 4;
+
+struct Context
+{
+    VkInstance instance = VK_NULL_HANDLE;
+    VkPhysicalDevice gpu = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+    VkQueue queue = VK_NULL_HANDLE;
+    uint32_t queueFamily = 0;
+    VkPhysicalDeviceProperties props = {};
+    VkPhysicalDeviceMemoryProperties memProps = {};
+};
+const Context& Ctx();
+
+/// Slot of the frame being recorded, 0..kFramesInFlight-1.
+uint32_t FrameIndex();
+
+/// Run `fn` once the GPU can no longer be using what it frees.
+void DeferDestroy(std::function<void()> fn);
+void WaitIdle();
+
+/// Submit one-shot work synchronously (uploads outside the frame).
+VkCommandBuffer BeginOneShot();
+void EndOneShot(VkCommandBuffer cmd);
+
+/// Layout transition over the whole colour image.
+void TransitionImage(VkCommandBuffer cmd, VkImage image, uint32_t mipLevels,
+                     VkImageLayout oldLayout, VkImageLayout newLayout,
+                     VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                     VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage);
+
+/// A sampled 2D colour image with memory and view.
+struct Image
+{
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE;
+    VkFormat format = VK_FORMAT_UNDEFINED;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t mipLevels = 1;
+    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+};
+/// `swizzleAlphaOne` forces alpha to 1 in the view, for XRGB/RGB formats.
+bool CreateImage(Image& out, uint32_t width, uint32_t height, VkFormat format,
+                 VkImageUsageFlags usage, uint32_t mipLevels = 1, bool swizzleAlphaOne = false);
+void DestroyImage(Image& img);
+void DeferDestroyImage(Image& img);
+
+/// Host-visible, coherent buffer.
+struct Buffer
+{
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    void* mapped = nullptr;
+    VkDeviceSize size = 0;
+};
+bool CreateBuffer(Buffer& out, VkDeviceSize size, VkBufferUsageFlags usage);
+void DestroyBuffer(Buffer& buf);
+void DeferDestroyBuffer(Buffer& buf);
+
+/// The chain's output goes to the screen by blit here, not through ImGui:
+/// these only keep its interface (no texture is registered).
+ImTextureID RegisterImage(VkImageView view);
+void UnregisterImage(ImTextureID tex);
+
+/// Optional pass over the game image before it reaches the screen (a shader
+/// preset): given the core's image (in `layout`, to be left in it) and the
+/// size it is shown at, returns an image of that size in
+/// SHADER_READ_ONLY_OPTIMAL, or null to show the core's image as it is.
+using GameFilter = std::function<const Image*(VkCommandBuffer cmd, VkImage image, VkImageLayout layout,
+                                              uint32_t srcWidth, uint32_t srcHeight,
+                                              uint32_t dstWidth, uint32_t dstHeight)>;
+void SetGameFilter(GameFilter filter);
 
 }  // namespace TicoVulkan

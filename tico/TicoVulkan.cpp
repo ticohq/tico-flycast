@@ -110,6 +110,31 @@ retro_hw_render_interface_vulkan s_hwIface{};
 
 std::mutex s_queueMutex;
 
+// Shader chain support: an optional pass over the game image, and what it
+// frees once the GPU is done (DeferDestroy), tagged with the frame it was
+// queued in.
+GameFilter s_gameFilter;
+struct Deferred
+{
+    uint64_t frame;
+    std::function<void()> fn;
+};
+std::vector<Deferred> s_deferred;
+uint64_t s_frameSerial = 0;
+
+// Runs what every frame slot's fence has passed since (all of it with `all`).
+void RunDeferred(bool all)
+{
+    const uint64_t slots = s_frames.empty() ? 1 : s_frames.size();
+    std::vector<Deferred> keep;
+    std::vector<Deferred> run;
+    for (Deferred& d : s_deferred)
+        (all || d.frame + slots <= s_frameSerial ? run : keep).push_back(std::move(d));
+    s_deferred = std::move(keep);
+    for (Deferred& d : run)
+        d.fn();
+}
+
 #ifdef __SWITCH__
 NWindow* s_nwindow = nullptr;
 #endif
@@ -690,6 +715,8 @@ void Shutdown()
     }
 
     ShutdownOverlayRendererInternal();
+    s_gameFilter = nullptr;
+    RunDeferred(true);
 
     if (s_negIface && s_negIface->destroy_device)
         s_negIface->destroy_device();
@@ -744,6 +771,7 @@ bool BeginFrame()
     // Wait for the previous use of this frame slot to complete on the GPU.
     (void)s_device.waitForFences(f.inflightFence, VK_TRUE, UINT64_MAX);
     s_device.resetFences(f.inflightFence);
+    RunDeferred(false);
 
     try
     {
@@ -816,22 +844,6 @@ void EndFrame()
 
         vk::Image coreImage(sourceImage->create_info.image);
         vk::ImageLayout coreLayout = static_cast<vk::ImageLayout>(sourceImage->image_layout);
-
-        // Bring core's image into TRANSFER_SRC. Core writes to it via the
-        // graphics pipeline (color attachment + final-layout transition to
-        // SHADER_READ_ONLY_OPTIMAL) on a separate submit; we wait on
-        // ALL_COMMANDS / MEMORY_READ|WRITE so anything it did is visible.
-        TransitionLayout(f.cmd, coreImage,
-                         coreLayout, vk::ImageLayout::eTransferSrcOptimal,
-                         vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
-                         vk::AccessFlagBits::eTransferRead,
-                         vk::PipelineStageFlagBits::eAllCommands,
-                         vk::PipelineStageFlagBits::eTransfer);
-
-        // Blit core's image → swap image. Image-to-image blit handles
-        // R8G8B8A8 ↔ B8G8R8A8 swizzles automatically. Source extent comes
-        // from the most recent video_refresh callback (retro_vulkan_image
-        // itself doesn't carry it).
         const uint32_t srcW = s_sourceExtent.width  ? s_sourceExtent.width  : s_swapExtent.width;
         const uint32_t srcH = s_sourceExtent.height ? s_sourceExtent.height : s_swapExtent.height;
 
@@ -866,25 +878,49 @@ void EndFrame()
                                   {}, mb, {}, {});
         }
 
+        // A shader preset renders the game at its on-screen size; that image
+        // is then copied 1:1 into the rect instead of the core's.
+        const Image* filtered = nullptr;
+        if (s_gameFilter)
+            filtered = s_gameFilter(static_cast<VkCommandBuffer>(f.cmd), static_cast<VkImage>(coreImage),
+                                    static_cast<VkImageLayout>(coreLayout), srcW, srcH,
+                                    static_cast<uint32_t>(dstX1 - dstX0),
+                                    static_cast<uint32_t>(dstY1 - dstY0));
+
+        vk::Image blitSource = filtered ? vk::Image(filtered->image) : coreImage;
+        vk::ImageLayout blitLayout = filtered ? vk::ImageLayout::eShaderReadOnlyOptimal : coreLayout;
+
+        // Bring the image into TRANSFER_SRC. The core writes to its own via
+        // the graphics pipeline on a separate submit; we wait on ALL_COMMANDS
+        // / MEMORY_READ|WRITE so anything it did is visible.
+        TransitionLayout(f.cmd, blitSource,
+                         blitLayout, vk::ImageLayout::eTransferSrcOptimal,
+                         vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
+                         vk::AccessFlagBits::eTransferRead,
+                         vk::PipelineStageFlagBits::eAllCommands,
+                         vk::PipelineStageFlagBits::eTransfer);
+
         vk::ImageBlit blit;
         blit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
         blit.srcSubresource.mipLevel = 0;
         blit.srcSubresource.baseArrayLayer = 0;
         blit.srcSubresource.layerCount = 1;
         blit.srcOffsets[0] = vk::Offset3D(0, 0, 0);
-        blit.srcOffsets[1] = vk::Offset3D(static_cast<int32_t>(srcW),
-                                          static_cast<int32_t>(srcH), 1);
+        blit.srcOffsets[1] = filtered
+            ? vk::Offset3D(static_cast<int32_t>(filtered->width), static_cast<int32_t>(filtered->height), 1)
+            : vk::Offset3D(static_cast<int32_t>(srcW), static_cast<int32_t>(srcH), 1);
         blit.dstSubresource = blit.srcSubresource;
         blit.dstOffsets[0] = vk::Offset3D(dstX0, dstY0, 0);
         blit.dstOffsets[1] = vk::Offset3D(dstX1, dstY1, 1);
 
-        f.cmd.blitImage(coreImage, vk::ImageLayout::eTransferSrcOptimal,
+        // Image-to-image blit handles R8G8B8A8 <-> B8G8R8A8 swizzles.
+        f.cmd.blitImage(blitSource, vk::ImageLayout::eTransferSrcOptimal,
                         swapImage, vk::ImageLayout::eTransferDstOptimal,
-                        blit, vk::Filter::eLinear);
+                        blit, filtered ? vk::Filter::eNearest : vk::Filter::eLinear);
 
-        // Restore core's image layout so the core can keep using it.
-        TransitionLayout(f.cmd, coreImage,
-                         vk::ImageLayout::eTransferSrcOptimal, coreLayout,
+        // Restore the image's layout so its owner can keep using it.
+        TransitionLayout(f.cmd, blitSource,
+                         vk::ImageLayout::eTransferSrcOptimal, blitLayout,
                          vk::AccessFlagBits::eTransferRead,
                          vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
                          vk::PipelineStageFlagBits::eTransfer,
@@ -994,6 +1030,7 @@ void EndFrame()
     }
 
     s_frameInFlight = false;
+    s_frameSerial++;
     s_currentFrame = (s_currentFrame + 1) % static_cast<uint32_t>(s_frames.size());
 }
 
@@ -1410,6 +1447,227 @@ void SetGameViewport(int x, int y, int width, int height)
     else
         s_gameViewport = vk::Rect2D{{x, y}, {static_cast<uint32_t>(width),
                                              static_cast<uint32_t>(height)}};
+}
+
+// --- Shader chain support --------------------------------------------------
+
+const Context& Ctx()
+{
+    static Context ctx;
+    if (ctx.device != static_cast<VkDevice>(s_device))
+    {
+        ctx.instance = static_cast<VkInstance>(s_instance);
+        ctx.gpu = static_cast<VkPhysicalDevice>(s_gpu);
+        ctx.device = static_cast<VkDevice>(s_device);
+        ctx.queue = static_cast<VkQueue>(s_queue);
+        ctx.queueFamily = s_queueFamilyIndex;
+        if (s_gpu)
+        {
+            ctx.props = static_cast<VkPhysicalDeviceProperties>(s_gpu.getProperties());
+            ctx.memProps = static_cast<VkPhysicalDeviceMemoryProperties>(s_gpu.getMemoryProperties());
+        }
+    }
+    return ctx;
+}
+
+uint32_t FrameIndex()
+{
+    return s_currentFrame;
+}
+
+void DeferDestroy(std::function<void()> fn)
+{
+    if (fn)
+        s_deferred.push_back({s_frameSerial, std::move(fn)});
+}
+
+void WaitIdle()
+{
+    if (!s_device)
+        return;
+    std::lock_guard<std::mutex> guard(s_queueMutex);
+    try { s_device.waitIdle(); } catch (...) {}
+}
+
+VkCommandBuffer BeginOneShot()
+{
+    vk::CommandBufferAllocateInfo cbai(s_commandPool, vk::CommandBufferLevel::ePrimary, 1);
+    vk::CommandBuffer cmd = s_device.allocateCommandBuffers(cbai)[0];
+    cmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+    return static_cast<VkCommandBuffer>(cmd);
+}
+
+void EndOneShot(VkCommandBuffer raw)
+{
+    vk::CommandBuffer cmd(raw);
+    cmd.end();
+    vk::Fence fence = s_device.createFence({});
+    vk::SubmitInfo submit;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &cmd;
+    {
+        std::lock_guard<std::mutex> guard(s_queueMutex);
+        s_queue.submit(submit, fence);
+    }
+    (void)s_device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+    s_device.destroyFence(fence);
+    s_device.freeCommandBuffers(s_commandPool, cmd);
+}
+
+void TransitionImage(VkCommandBuffer cmd, VkImage image, uint32_t mipLevels,
+                     VkImageLayout oldLayout, VkImageLayout newLayout,
+                     VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                     VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
+{
+    vk::ImageMemoryBarrier barrier;
+    barrier.oldLayout = static_cast<vk::ImageLayout>(oldLayout);
+    barrier.newLayout = static_cast<vk::ImageLayout>(newLayout);
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange = vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0,
+                                                         mipLevels ? mipLevels : 1, 0, 1);
+    barrier.srcAccessMask = static_cast<vk::AccessFlags>(srcAccess);
+    barrier.dstAccessMask = static_cast<vk::AccessFlags>(dstAccess);
+    vk::CommandBuffer(cmd).pipelineBarrier(static_cast<vk::PipelineStageFlags>(srcStage),
+                                           static_cast<vk::PipelineStageFlags>(dstStage),
+                                           vk::DependencyFlags(), nullptr, nullptr, barrier);
+}
+
+bool CreateImage(Image& out, uint32_t width, uint32_t height, VkFormat format,
+                 VkImageUsageFlags usage, uint32_t mipLevels, bool swizzleAlphaOne)
+{
+    out = {};
+    try
+    {
+        vk::ImageCreateInfo ici;
+        ici.imageType = vk::ImageType::e2D;
+        ici.format = static_cast<vk::Format>(format);
+        ici.extent = vk::Extent3D(width, height, 1);
+        ici.mipLevels = mipLevels ? mipLevels : 1;
+        ici.arrayLayers = 1;
+        ici.samples = vk::SampleCountFlagBits::e1;
+        ici.tiling = vk::ImageTiling::eOptimal;
+        ici.usage = static_cast<vk::ImageUsageFlags>(usage);
+        ici.initialLayout = vk::ImageLayout::eUndefined;
+        vk::Image image = s_device.createImage(ici);
+
+        const vk::MemoryRequirements req = s_device.getImageMemoryRequirements(image);
+        uint32_t type = 0;
+        if (!FindMemoryType(req.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal, type))
+        {
+            s_device.destroyImage(image);
+            return false;
+        }
+        vk::DeviceMemory memory = s_device.allocateMemory(vk::MemoryAllocateInfo(req.size, type));
+        s_device.bindImageMemory(image, memory, 0);
+
+        vk::ImageViewCreateInfo vci;
+        vci.image = image;
+        vci.viewType = vk::ImageViewType::e2D;
+        vci.format = ici.format;
+        if (swizzleAlphaOne)
+            vci.components.a = vk::ComponentSwizzle::eOne;
+        vci.subresourceRange = vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0,
+                                                         ici.mipLevels, 0, 1);
+        vk::ImageView view = s_device.createImageView(vci);
+
+        out.image = static_cast<VkImage>(image);
+        out.memory = static_cast<VkDeviceMemory>(memory);
+        out.view = static_cast<VkImageView>(view);
+        out.format = format;
+        out.width = width;
+        out.height = height;
+        out.mipLevels = ici.mipLevels;
+        out.layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        return true;
+    }
+    catch (const vk::SystemError& e)
+    {
+        VK_LOG_ERROR("CreateImage %ux%u failed: %s", width, height, e.what());
+        DestroyImage(out);
+        return false;
+    }
+}
+
+void DestroyImage(Image& img)
+{
+    if (img.view) s_device.destroyImageView(vk::ImageView(img.view));
+    if (img.image) s_device.destroyImage(vk::Image(img.image));
+    if (img.memory) s_device.freeMemory(vk::DeviceMemory(img.memory));
+    img = {};
+}
+
+void DeferDestroyImage(Image& img)
+{
+    if (!img.image && !img.memory && !img.view)
+        return;
+    Image copy = img;
+    img = {};
+    DeferDestroy([copy]() mutable { DestroyImage(copy); });
+}
+
+bool CreateBuffer(Buffer& out, VkDeviceSize size, VkBufferUsageFlags usage)
+{
+    out = {};
+    try
+    {
+        vk::Buffer buffer = s_device.createBuffer(
+            vk::BufferCreateInfo({}, size, static_cast<vk::BufferUsageFlags>(usage)));
+        const vk::MemoryRequirements req = s_device.getBufferMemoryRequirements(buffer);
+        uint32_t type = 0;
+        if (!FindMemoryType(req.memoryTypeBits,
+                            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                            type))
+        {
+            s_device.destroyBuffer(buffer);
+            return false;
+        }
+        vk::DeviceMemory memory = s_device.allocateMemory(vk::MemoryAllocateInfo(req.size, type));
+        s_device.bindBufferMemory(buffer, memory, 0);
+        out.buffer = static_cast<VkBuffer>(buffer);
+        out.memory = static_cast<VkDeviceMemory>(memory);
+        out.mapped = s_device.mapMemory(memory, 0, size);
+        out.size = size;
+        return true;
+    }
+    catch (const vk::SystemError& e)
+    {
+        VK_LOG_ERROR("CreateBuffer %llu failed: %s", (unsigned long long)size, e.what());
+        DestroyBuffer(out);
+        return false;
+    }
+}
+
+void DestroyBuffer(Buffer& buf)
+{
+    if (buf.mapped) s_device.unmapMemory(vk::DeviceMemory(buf.memory));
+    if (buf.buffer) s_device.destroyBuffer(vk::Buffer(buf.buffer));
+    if (buf.memory) s_device.freeMemory(vk::DeviceMemory(buf.memory));
+    buf = {};
+}
+
+void DeferDestroyBuffer(Buffer& buf)
+{
+    if (!buf.buffer && !buf.memory)
+        return;
+    Buffer copy = buf;
+    buf = {};
+    DeferDestroy([copy]() mutable { DestroyBuffer(copy); });
+}
+
+ImTextureID RegisterImage(VkImageView)
+{
+    return ImTextureID_Invalid;
+}
+
+void UnregisterImage(ImTextureID)
+{
+}
+
+void SetGameFilter(GameFilter filter)
+{
+    s_gameFilter = std::move(filter);
 }
 
 }  // namespace TicoVulkan

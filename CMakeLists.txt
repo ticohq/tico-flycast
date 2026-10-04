@@ -212,6 +212,11 @@ if(NINTENDO_SWITCH)
 				tico/FlycastDiscs.cpp
 				tico/FlycastCheats.cpp
 				tico/FlycastSaves.cpp
+				tico/FlycastLibrary.cpp
+				tico/FlycastShaders.cpp
+				tico/TicoShaderChain.cpp
+				tico/TicoSlang.cpp
+				tico/deps/SPIRV-Reflect/spirv_reflect.c
 				tico/UsbStorage.cpp
 				tico/overlay/imgui_overlay.cpp
 				tico/overlay/overlay_ui.cpp
@@ -224,8 +229,17 @@ if(NINTENDO_SWITCH)
 				shell/switch/context_switch.S)
 			target_include_directories(${PROJECT_NAME} PRIVATE
 				tico
+				tico/deps/SPIRV-Reflect
 				shell/libretro
 				shell/switch)
+			# The shader chain (shared with the other cores' frontends) calls
+			# Vulkan directly, which NVK's static libvulkan exports; the core
+			# itself builds without prototypes. Its stb_image_write comes from
+			# the core.
+			set_source_files_properties(tico/FlycastShaders.cpp tico/TicoShaderChain.cpp tico/TicoSlang.cpp
+				PROPERTIES COMPILE_OPTIONS "-UVK_NO_PROTOTYPES")
+			set_source_files_properties(tico/TicoShaderChain.cpp
+				PROPERTIES COMPILE_DEFINITIONS TICO_STB_IMAGE_WRITE_EXTERNAL)
 
 			# SDL2 for Switch (provided by devkitPro). Used for audio +
 			# gamecontroller; we no longer create an SDL window.
@@ -1656,6 +1670,7 @@ if(NINTENDO_SWITCH)
 			file(COPY "${CMAKE_SOURCE_DIR}/tico/fonts" DESTINATION ${ROMFS_DIR})
 			file(COPY "${CMAKE_SOURCE_DIR}/tico/lang" DESTINATION ${ROMFS_DIR})
 			file(COPY "${CMAKE_SOURCE_DIR}/tico/assets" DESTINATION ${ROMFS_DIR})
+			file(COPY "${CMAKE_SOURCE_DIR}/tico/shaders" DESTINATION ${ROMFS_DIR})
 			# the overlay builds its settings menu from the module's own definition
 			file(COPY "${CMAKE_SOURCE_DIR}/tico/module/settings.json" DESTINATION "${ROMFS_DIR}/module")
 			
