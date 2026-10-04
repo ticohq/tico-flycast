@@ -1675,7 +1675,7 @@ if(NINTENDO_SWITCH)
 			# the overlay builds its settings menu from the module's own definition
 			file(COPY "${CMAKE_SOURCE_DIR}/tico/module/settings.json" DESTINATION "${ROMFS_DIR}/module")
 			
-			nx_generate_nacp(tico-flycast.nacp NAME "Flycast" AUTHOR "ticoverse.com" VERSION "2.0.0")
+			nx_generate_nacp(tico-flycast.nacp NAME "Flycast" AUTHOR "ticoverse.com" VERSION "3.0.0")
 			nx_create_nro(${PROJECT_NAME} NACP tico-flycast.nacp ICON "${CMAKE_SOURCE_DIR}/shell/switch/flycast.jpeg" ROMFS ${ROMFS_DIR})
 		else()
 			# Combine static libraries for multi-core integration
@@ -1691,7 +1691,7 @@ if(NINTENDO_SWITCH)
 				DEPENDS xxHash::xxhash chdr-static zip ${PROJECT_NAME})
 		endif()
 	else()
-		nx_generate_nacp(flycast.nacp NAME "Flycast" AUTHOR "ticoverse.com" VERSION "2.0.0")
+		nx_generate_nacp(flycast.nacp NAME "Flycast" AUTHOR "ticoverse.com" VERSION "3.0.0")
 		nx_create_nro(flycast NACP flycast.nacp ICON "${CMAKE_SOURCE_DIR}/shell/switch/flycast.jpeg")
 	endif()
 endif()
