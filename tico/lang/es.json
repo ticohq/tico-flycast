@@ -134,5 +134,6 @@
     "settings_flycast_arcade_map_button_5": "Botón 5",
     "settings_flycast_arcade_map_button_6": "Botón 6",
     "settings_flycast_arcade_map_button_7": "Botón 7",
-    "settings_flycast_arcade_map_button_8": "Botón 8"
+    "settings_flycast_arcade_map_button_8": "Botón 8",
+    "emulator_no_preview": "Sin vista previa"
 }
