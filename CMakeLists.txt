@@ -213,6 +213,7 @@ if(NINTENDO_SWITCH)
 				tico/FlycastCheats.cpp
 				tico/FlycastSaves.cpp
 				tico/FlycastLibrary.cpp
+				tico/FlycastBios.cpp
 				tico/FlycastShaders.cpp
 				tico/TicoShaderChain.cpp
 				tico/TicoSlang.cpp

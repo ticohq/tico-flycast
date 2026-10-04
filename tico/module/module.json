@@ -28,7 +28,12 @@
         {
           "any_of": [
             "dc_boot.bin"
-          ]
+          ],
+          "size": 2097152,
+          "unless_option": {
+            "key": "reicast_hle_bios",
+            "value": "enabled"
+          }
         }
       ],
       "colors": {
@@ -70,7 +75,14 @@
         "end": "2FD6C8",
         "start_dark": "166F9A",
         "end_dark": "1F9088"
-      }
+      },
+      "bios": [
+        {
+          "any_of": [
+            "naomi.zip"
+          ]
+        }
+      ]
     },
     {
       "slug": "atomiswave",
@@ -104,7 +116,14 @@
         "end": "E6B43C",
         "start_dark": "A8542C",
         "end_dark": "A8842C"
-      }
+      },
+      "bios": [
+        {
+          "any_of": [
+            "awbios.zip"
+          ]
+        }
+      ]
     }
   ]
 }

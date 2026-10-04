@@ -1285,6 +1285,13 @@ bool TicoCore::HandleEnvironment(unsigned cmd, void *data)
         *(bool *)data = true;
         return true;
 
+    case RETRO_ENVIRONMENT_SET_ROTATION:
+        // quarter turns counter-clockwise the frontend shows the frame at:
+        // vertical arcade games, or any game on a screen held upright
+        m_rotation = data ? (int)(*(const unsigned *)data % 4) : 0;
+        LOG_CORE("Rotation: %d", m_rotation);
+        return true;
+
     case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
         *(bool *)data = m_variablesUpdated;
         m_variablesUpdated = false;

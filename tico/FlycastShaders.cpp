@@ -281,14 +281,22 @@ void Init(TicoCore *core)
         g_chain.reset();
         return;
     }
+    // smooth like Flycast's own scaling when a pass does not choose (the
+    // built-in pass that turns vertical games included)
+    g_chain->SetSmooth(true);
     RegisterShaderMenu();
     TicoVulkan::SetGameFilter([](VkCommandBuffer cmd, VkImage image, VkImageLayout layout,
                                  uint32_t srcWidth, uint32_t srcHeight, uint32_t dstWidth,
                                  uint32_t dstHeight) -> const TicoVulkan::Image * {
-        // no preset: the core's image goes to the screen as it always has
-        if (!g_chain || g_activePreset.empty() || g_activePreset == "\x01" || !dstWidth || !dstHeight ||
+        // no preset and nothing to turn: the core's image goes to the screen
+        // as it always has; a vertical game is turned by the chain's built-in
+        // pass when no preset is chosen
+        const int rotation = g_core ? g_core->GetRotation() : 0;
+        if (!g_chain || g_activePreset == "\x01" || !dstWidth || !dstHeight ||
+            (g_activePreset.empty() && rotation == 0) ||
             TicoVulkan::FrameIndex() >= TicoVulkan::kFramesInFlight)
             return nullptr;
+        g_chain->SetRotation(rotation);
         g_chain->SetSourceImage(image, layout, srcWidth, srcHeight);
         const float aspect = g_core && g_core->GetAspectRatio() > 0.1f ? g_core->GetAspectRatio() : 4.0f / 3.0f;
         const double fps = g_core && g_core->GetFPS() > 0.0 ? g_core->GetFPS() : 60.0;

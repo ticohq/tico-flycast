@@ -5,6 +5,7 @@
 
 #include "FlycastRuntime.h"
 
+#include "FlycastBios.h"
 #include "FlycastCheats.h"
 #include "FlycastDiscs.h"
 #include "FlycastLibrary.h"
@@ -188,6 +189,21 @@ std::string TrFormat(const char *key, int value)
     const std::string format = SwitchFrontend::OverlayTranslation::tr(key);
     char text[256];
     std::snprintf(text, sizeof(text), format.c_str(), value);
+    return text;
+}
+
+// The same with two %s, filled in order (not snprintf: a translation with
+// another % sequence must not read off the stack).
+std::string TrFormat2(const char *key, const std::string &first, const std::string &second)
+{
+    std::string text = SwitchFrontend::OverlayTranslation::tr(key);
+    for (const std::string *value : {&first, &second})
+    {
+        const size_t at = text.find("%s");
+        if (at == std::string::npos)
+            break;
+        text.replace(at, 2, *value);
+    }
     return text;
 }
 
@@ -433,6 +449,9 @@ bool FlycastRuntime::Initialize(const LaunchInfo &)
     // (renderer included) on a first run, so its saves keep them.
     core_->EnsureConfigLoaded();
     OverlayConfig::ReloadConfig();
+    // this game's own settings (Settings > This Game), if it has them, over
+    // the core's; none in the library
+    OverlayConfig::SetGame(romPath_);
     ApplySettingsToCore();
 
     audio_ = std::make_unique<TicoAudio>();
@@ -467,6 +486,32 @@ bool FlycastRuntime::LoadContent(const std::string &path)
         return true;
     }
     LOG_INFO("HOME", "Loading ROM: %s", romPath_.c_str());
+
+    // Without its BIOS a game only shows a black screen: say what is missing
+    // and where it goes instead of booting it.
+    const FlycastBios::Status bios = FlycastBios::Check(
+        TicoConfig::Slug(), isArcade_, OverlayConfig::GetConfigValue("reicast_hle_bios", "disabled") == "enabled");
+    if (!bios.ok)
+    {
+        biosMissing_ = true;
+        if (InitOverlay(romPath_))
+        {
+            const std::string text = bios.wrongSize
+                ? TrFormat2("emulator_bios_wrong_size", bios.file, bios.size) + "\n" + bios.folder
+                : TrFormat2("emulator_bios_missing", bios.file, bios.folder);
+            std::vector<std::string> choices;
+            if (!isArcade_)
+                choices.push_back(SwitchFrontend::OverlayTranslation::tr("emulator_bios_use_hle"));
+            choices.push_back(SwitchFrontend::OverlayTranslation::tr("emulator_exit_game"));
+            OpenMenu();
+            OverlayUI::ShowNotice(text, choices);
+        }
+        lastTicks_ = SDL_GetTicks();
+        return true;
+    }
+    if (bios.unknownDump)
+        OverlayUI::ShowToast(SwitchFrontend::OverlayTranslation::tr("emulator_bios_unknown"),
+                             OverlayUI::ToastCorner::TopRight);
 
     if (!core_->LoadGame(romPath_))
     {
@@ -575,6 +620,14 @@ bool FlycastRuntime::InitOverlay(const std::string &romPath)
             FlycastCheats::Toggle((size_t)index);
             return true;
         });
+    // Settings > Players: what each port has, and the system's screen to
+    // choose who is which player
+    OverlayUI::PlayerCallbacks players;
+    players.ports = [] { return ControllerNames(); };
+    players.note = [this] {
+        return isArcade_ ? SwitchFrontend::OverlayTranslation::tr("emulator_players_arcade") : std::string();
+    };
+    OverlayUI::SetPlayerCallbacks(std::move(players));
     OverlayUI::ReloadSettings();
     overlayReady_ = true;
     return true;
@@ -589,6 +642,7 @@ void FlycastRuntime::ShutdownOverlay()
         slotPictures_ = {}; // freed with the overlay's textures below
         OverlayUI::SetDiscCallback(nullptr);
         OverlayUI::SetCheatCallbacks(nullptr, nullptr);
+        OverlayUI::SetPlayerCallbacks({});
         FlycastLibrary::Unregister();
         ImGuiOverlay::Shutdown(); // frees textures via overlayHost_ (still alive)
     }
@@ -744,6 +798,29 @@ void FlycastRuntime::RunMenuAction()
             core_->Reset();
         CloseMenu();
         return;
+    case Action::ControllerOrder:
+        if (!ShowControllerOrder())
+            OverlayUI::ShowToast(SwitchFrontend::OverlayTranslation::tr("emulator_controllers_failed"),
+                                 OverlayUI::ToastCorner::TopRight);
+        return;
+    case Action::NoticeChoice:
+    {
+        // the missing-BIOS notice: HLE BIOS (Dreamcast only) or leave
+        const int choice = OverlayUI::ConsumeNoticeChoice();
+        if (!isArcade_ && choice == 0)
+        {
+            OverlayConfig::SetConfigValue("reicast_hle_bios", "enabled");
+            OverlayConfig::SaveConfig();
+            relaunch_ = true;
+        }
+        else if (fromLibrary_)
+            LaunchSelf(argv0_.c_str(), {}, log_);
+        else if (!standalone_)
+            chainload_ = true;
+        CloseMenu();
+        exitRequested_ = true;
+        return;
+    }
     case Action::SwapDisc:
     {
         const int index = OverlayUI::ConsumeDiscIndex();
