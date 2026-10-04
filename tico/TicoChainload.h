@@ -12,4 +12,8 @@ namespace Tico
 /// No-op off Switch.
 void ChainloadLauncher(const LogCallback &log = {});
 
+/// Queue this NRO again (argv[0]) with the same arguments, to start the game
+/// afresh. Call after the runtime has shut down. No-op off Switch.
+void RelaunchSelf(int argc, char **argv, const LogCallback &log = {});
+
 }  // namespace Tico

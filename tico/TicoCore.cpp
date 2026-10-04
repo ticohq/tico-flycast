@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cctype>
 #include "TicoLogger.h"
+#include "FlycastDiscs.h"
 #include <curl/curl.h>
 #include <thread>
 #include "rc_client.h"
@@ -835,8 +836,14 @@ void TicoCore::RunFrame()
         m_swapDelayFrames--;
         if (m_swapDelayFrames == 0)
         {
+            // a disc the core already lists (an .m3u's) is selected as is;
+            // any other replaces the one in the drive
+            const int listed = FindDiscIndex(m_pendingSwapPath);
+            const unsigned index = listed >= 0 ? (unsigned)listed
+                                 : m_diskControl.get_image_index ? m_diskControl.get_image_index() : 0;
             retro_game_info info = {m_pendingSwapPath.c_str(), nullptr, 0, ""};
-            if (m_diskControl.replace_image_index(0, &info) && m_diskControl.set_image_index(0))
+            if ((listed >= 0 || m_diskControl.replace_image_index(index, &info)) &&
+                m_diskControl.set_image_index(index))
             {
                 m_diskControl.set_eject_state(false);
                 LOG_CORE("Delayed SwapDisk executed successfully.");
@@ -1611,6 +1618,35 @@ bool TicoCore::SwapDiskByPath(const std::string &discPath)
     return true;
 }
 
+// The core's index for the disc at @p path, or -1 when it does not list it.
+int TicoCore::FindDiscIndex(const std::string &path) const
+{
+    if (!m_diskControl.get_num_images || !m_diskControl.get_image_path)
+        return -1;
+    const std::string wanted = NormalizeDiscPath(path);
+    const unsigned count = m_diskControl.get_num_images();
+    for (unsigned i = 0; i < count; ++i)
+    {
+        char listed[1024] = {0};
+        if (m_diskControl.get_image_path(i, listed, sizeof(listed)) && NormalizeDiscPath(listed) == wanted)
+            return (int)i;
+    }
+    return -1;
+}
+
+std::string TicoCore::CurrentDiscPath() const
+{
+    if (m_swapPending)
+        return m_pendingSwapPath;
+    if (m_hasDiskControl && m_diskControl.get_image_index && m_diskControl.get_image_path)
+    {
+        char path[1024] = {0};
+        if (m_diskControl.get_image_path(m_diskControl.get_image_index(), path, sizeof(path)) && path[0])
+            return path;
+    }
+    return m_gamePath;
+}
+
 //==============================================================================
 // RetroAchievements Functionality
 //==============================================================================
@@ -2027,4 +2063,9 @@ void TicoCore::ProcessPendingBadgeUploads() {
             LOG_CORE("RA: Badge texture creation failed: %s", name.c_str());
         }
     }
+}
+
+bool TicoCore::IsHardcoreActive() const
+{
+    return m_rcClient && rc_client_get_hardcore_enabled(m_rcClient);
 }

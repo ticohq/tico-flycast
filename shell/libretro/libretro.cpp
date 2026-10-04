@@ -3704,6 +3704,13 @@ void fatal_error(const char* text, ...)
 #endif
 }
 
+// How many discs the content has (an .m3u lists several), for the VMU naming
+// in oslib.cpp.
+unsigned retro_disc_count()
+{
+	return disk_paths.size();
+}
+
 static bool retro_set_eject_state(bool ejected)
 {
 	disc_tray_open = ejected;

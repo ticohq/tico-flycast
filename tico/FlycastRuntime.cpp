@@ -5,6 +5,7 @@
 
 #include "FlycastRuntime.h"
 
+#include "FlycastCheats.h"
 #include "FlycastDiscs.h"
 #include "TicoAudio.h"
 #include "TicoConfig.h"
@@ -444,9 +445,11 @@ bool FlycastRuntime::LoadContent(const std::string &path)
     {
         LOG_ERROR("HOME", "LoadGame failed; idling");
     }
-    else if (!InitOverlay(romPath_))
+    else
     {
-        LOG_WARN("HOME", "Overlay init failed; continuing without Tico overlay");
+        FlycastCheats::Load(core_->CurrentDiscPath(), TicoConfig::Slug());
+        if (!InitOverlay(romPath_))
+            LOG_WARN("HOME", "Overlay init failed; continuing without Tico overlay");
     }
 
     lastTicks_ = SDL_GetTicks();
@@ -467,7 +470,7 @@ bool FlycastRuntime::InitOverlay(const std::string &romPath)
 
     // Prefer the launcher-supplied title; fall back to the rom filename.
     OverlayUI::SetGameTitle(titleArg_.empty() ? GameTitleFromPath(romPath) : titleArg_);
-    // the menu's slots 1..4 are the state files .state0 .. .state3
+    // the menu's slots 1..6 are the state files .state0 .. .state5
     FlycastOverlayHost *host = overlayHost_.get();
     OverlayUI::SetSlotOccupiedCallback([host](int slot) {
         return slot >= 1 && host->StateSlotExists(slot - 1);
@@ -504,17 +507,41 @@ bool FlycastRuntime::InitOverlay(const std::string &romPath)
         discPaths_.clear();
         if (!core_)
             return entries;
-        std::string current = core_->GetGamePath();
+        // the discs are found from the launched game (an .m3u lists them all);
+        // the current one is whatever is in the drive now
+        std::string game = core_->GetGamePath();
+        if (game.size() >= 2 && game.front() == '"' && game.back() == '"')
+            game = game.substr(1, game.size() - 2);
+        std::string current = core_->CurrentDiscPath();
         if (current.size() >= 2 && current.front() == '"' && current.back() == '"')
             current = current.substr(1, current.size() - 2);
         current = NormalizeDiscPath(current);
-        for (const DiscEntry &disc : ScanDiscs(current))
+        for (const DiscEntry &disc : ScanDiscs(NormalizeDiscPath(game)))
         {
             entries.push_back({disc.displayName, disc.romPath == current});
             discPaths_.push_back(disc.romPath);
         }
         return entries;
     });
+    // Cheats from the game's .cht/.cheats file; the menu hides them in hardcore.
+    OverlayUI::SetCheatCallbacks(
+        [this] {
+            std::vector<OverlayUI::CheatMenuEntry> entries;
+            // another disc resets the core's cheats: read that disc's file
+            if (core_ && !core_->IsSwapPending() &&
+                FlycastCheats::NeedsReload(core_->CurrentDiscPath()))
+                FlycastCheats::Load(core_->CurrentDiscPath(), TicoConfig::Slug());
+            const auto &cheats = FlycastCheats::List();
+            for (size_t i = 0; i < cheats.size(); ++i)
+                entries.push_back({cheats[i].name, cheats[i].enabled, true, (int)i, false});
+            return entries;
+        },
+        [this](int index) {
+            if (index < 0 || (core_ && core_->IsHardcoreActive()))
+                return false;
+            FlycastCheats::Toggle((size_t)index);
+            return true;
+        });
     OverlayUI::ReloadSettings();
     overlayReady_ = true;
     return true;
@@ -528,6 +555,7 @@ void FlycastRuntime::ShutdownOverlay()
         OverlayUI::SetSlotPreviewCallback(nullptr);
         slotPictures_ = {}; // freed with the overlay's textures below
         OverlayUI::SetDiscCallback(nullptr);
+        OverlayUI::SetCheatCallbacks(nullptr, nullptr);
         ImGuiOverlay::Shutdown(); // frees textures via overlayHost_ (still alive)
     }
     overlayHost_.reset();
@@ -584,6 +612,7 @@ void FlycastRuntime::OpenMenu()
     menuOpen_ = true;
     navHeldPrev_ = 0;
     navRepeatFrames_ = 0;
+    OverlayUI::SetHardcoreMode(core_ && core_->IsHardcoreActive());
     ImGuiOverlay::SetVisible(true);
 }
 
@@ -654,6 +683,15 @@ void FlycastRuntime::RunMenuAction()
         LOG_INFO("OVERLAY", "Exit requested");
         CloseMenu();
         chainload_ = true;
+        exitRequested_ = true;
+        return;
+    case Action::Restart:
+        // Starting the Dreamcast core afresh in this process is fragile (its
+        // Vulkan context and globals), so the NRO starts itself again with the
+        // same arguments; the game is saved on the way out.
+        LOG_INFO("OVERLAY", "Restart requested");
+        CloseMenu();
+        relaunch_ = true;
         exitRequested_ = true;
         return;
     case Action::Reset:

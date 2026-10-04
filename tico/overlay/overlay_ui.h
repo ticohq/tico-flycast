@@ -17,6 +17,8 @@ enum class Action {
     Resume,
     Exit,
     Reset,
+    // reload the running game from disk, as if it were started again
+    Restart,
     // the point to go back to is given by ConsumeRewindIndex
     Rewind,
     // a text setting needs the system keyboard; see ConsumeTextEditOption
@@ -29,10 +31,14 @@ enum class Action {
     SaveStateSlot2,
     SaveStateSlot3,
     SaveStateSlot4,
+    SaveStateSlot5,
+    SaveStateSlot6,
     LoadStateSlot1,
     LoadStateSlot2,
     LoadStateSlot3,
     LoadStateSlot4,
+    LoadStateSlot5,
+    LoadStateSlot6,
 };
 
 enum class ToastCorner {
@@ -51,11 +57,16 @@ void SetVisible(bool visible);
 Action Render(int display_w, int display_h);
 
 void SetGameTitle(std::string title);
+// RetroAchievements hardcore: Load State, Rewind and Cheats leave the menu.
+void SetHardcoreMode(bool hardcore);
 void SetNickname(std::string nickname);
 void SetAvatarTextureId(unsigned long long texture_id);
 // The selection border strip for the tint picked in tico (0 when there is
 // none; selected rows then get a plain highlight).
 void SetBorderTextureId(unsigned long long texture_id);
+// The quick menu's sidebar icons: Settings, Restart and Exit Game (0 for none).
+void SetSidebarIconTextures(unsigned long long settings, unsigned long long restart,
+                            unsigned long long exit);
 void ShowToast(std::string message, ToastCorner corner = ToastCorner::TopLeft);
 bool HasTransientContent();
 
@@ -103,6 +114,77 @@ struct DiscMenuEntry {
 };
 using DiscListFn = std::function<std::vector<DiscMenuEntry>()>;
 void SetDiscCallback(DiscListFn callback);
+
+// Shaders: a "Shaders" category in Settings, listed only in game (tico cannot
+// see the presets on the SD card). Its first row opens a browser over preset
+// folders; one row per #pragma parameter of the active preset follows, then a
+// row that resets them.
+struct ShaderBrowseEntry {
+    std::string label;
+    std::string path;
+    bool is_dir = false;
+};
+struct ShaderParameter {
+    std::string id;
+    std::string label;
+    float value = 0.0f;
+    float minimum = 0.0f;
+    float maximum = 1.0f;
+    float step = 0.01f;
+};
+struct ShaderCallbacks {
+    // name of the active preset, for the first row
+    std::function<std::string()> preset_label;
+    // folder the browser opens in
+    std::function<std::string()> browse_start;
+    // entries of a folder, its parent first
+    std::function<std::vector<ShaderBrowseEntry>(const std::string& dir)> browse;
+    // a preset was chosen
+    std::function<void(const std::string& path)> select;
+    std::function<std::vector<ShaderParameter>()> parameters;
+    std::function<void(const std::string& id, float value)> set_parameter;
+    std::function<void()> reset_parameters;
+};
+// Pass a default-constructed struct to remove the category.
+void SetShaderCallbacks(ShaderCallbacks callbacks);
+
+// Library: when the core starts without a game, the menu's root is a list of
+// the games found in the ROM folders instead of the quick menu, with Settings
+// on top and Exit (Action::Exit) at the bottom.
+struct LibraryEntry {
+    std::string title;
+    // shown on the right, e.g. the system
+    std::string detail;
+    std::string path;
+};
+struct LibraryCallbacks {
+    // the games, read again each time the library opens
+    std::function<std::vector<LibraryEntry>()> list;
+    // a game was chosen
+    std::function<void(const std::string& path)> launch;
+};
+void SetLibraryCallbacks(LibraryCallbacks callbacks);
+// Whether the menu's root is the library (no game running) or the quick menu.
+void SetLibraryMode(bool library);
+// Reads the game list again, e.g. after the folders changed.
+void RefreshLibrary();
+
+// A "Library" category in Settings: the folders searched for games, one group
+// per console. A group's base folders (tico's ROM bases) are listed but not
+// edited here; its own folders are an ordered list edited like Dolphin's game
+// folders: "Add folder", then per folder Change folder, Move up, Move down and
+// Remove (which asks first).
+struct LibraryFolderGroup {
+    std::string label;
+    std::vector<std::string> bases;
+    std::vector<std::string> folders;
+};
+struct LibraryFolderCallbacks {
+    std::function<std::vector<LibraryFolderGroup>()> groups;
+    // the new ordered folder list of a group
+    std::function<void(int group, const std::vector<std::string>& folders)> set;
+};
+void SetLibraryFolderCallbacks(LibraryFolderCallbacks callbacks);
 
 // The overlay renders on the presentation thread and never calls into the
 // emulator. The emulation thread polls these after each frame.

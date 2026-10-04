@@ -20,6 +20,9 @@
 #include "stdclass.h"
 #include "file/file_path.h"
 #include "oslib/i18n.h"
+#include <cctype>
+#include <sys/stat.h>
+#include <vector>
 #ifndef _WIN32
 #include <unistd.h>
 #endif
@@ -34,8 +37,57 @@ extern unsigned per_content_vmus;
 extern std::string arcadeFlashPath;
 extern retro_environment_t environ_cb;
 
+unsigned retro_disc_count();
+
 namespace hostfs
 {
+
+// A game on several discs shares one VMU, named after the game without its
+// disc tag ("Grandia II (USA) (Disc 2)" -> "Grandia II (USA)"; an .m3u's own
+// name), so a save made on disc 1 is there on disc 2. Empty for a single disc.
+static std::string sharedDiscName()
+{
+	std::string name = content_name;
+	std::string lower = name;
+	for (char &c : lower)
+		c = (char)std::tolower((unsigned char)c);
+	for (const char *tag : { "(disc", "(disk", "(cd" })
+	{
+		const size_t open = lower.find(tag);
+		if (open == std::string::npos)
+			continue;
+		const size_t close = lower.find(')', open);
+		size_t start = open;
+		while (start > 0 && name[start - 1] == ' ')
+			start--;
+		name.erase(start, close == std::string::npos ? std::string::npos : close + 1 - start);
+		return name;
+	}
+	return retro_disc_count() > 1 ? name : std::string();
+}
+
+// The newest of the VMUs a disc of this game used on its own before they were
+// shared: the disc's game ID, its file name, or a "(Disc N)" sibling's name.
+static std::string newestDiscVmu(const std::string& vmuDir, const std::string& shared,
+		const std::string& port, const std::string& gameIdPath)
+{
+	std::vector<std::string> candidates { gameIdPath,
+		vmuDir + std::string(content_name) + "." + port + ".bin" };
+	for (int disc = 1; disc <= 4; disc++)
+		candidates.push_back(vmuDir + shared + " (Disc " + std::to_string(disc) + ")." + port + ".bin");
+	std::string newest;
+	time_t newestTime = 0;
+	for (const std::string& path : candidates)
+	{
+		struct stat st;
+		if (!path.empty() && stat(path.c_str(), &st) == 0 && (newest.empty() || st.st_mtime > newestTime))
+		{
+			newest = path;
+			newestTime = st.st_mtime;
+		}
+	}
+	return newest;
+}
 
 std::string getVmuPath(const std::string& port, bool save)
 {
@@ -43,6 +95,27 @@ std::string getVmuPath(const std::string& port, bool save)
 			|| per_content_vmus == 2)
 	{
 		std::string vmuDir = vmu_dir_no_slash + std::string(PATH_DEFAULT_SLASH());
+		const std::string shared = settings.platform.isConsole() ? sharedDiscName() : std::string();
+		if (!shared.empty())
+		{
+			const std::string wpath = vmuDir + shared + "." + port + ".bin";
+			if (save || file_exists(wpath.c_str()))
+				return wpath;
+			// the first time: read the newest per-disc VMU; the VMU then
+			// saves it under the shared name (see maple_sega_vmu::OnSetup)
+			std::string gameIdPath;
+			if (!settings.content.gameId.empty())
+			{
+				constexpr std::string_view INVALID_CHARS { " /\\:*?|<>" };
+				gameIdPath = settings.content.gameId;
+				for (char &c: gameIdPath)
+					if (INVALID_CHARS.find(c) != INVALID_CHARS.npos)
+						c = '_';
+				gameIdPath = vmuDir + gameIdPath + "." + port + ".bin";
+			}
+			const std::string old = newestDiscVmu(vmuDir, shared, port, gameIdPath);
+			return old.empty() ? wpath : old;
+		}
 		if (settings.platform.isConsole() && !settings.content.gameId.empty())
 		{
 			constexpr std::string_view INVALID_CHARS { " /\\:*?|<>" };

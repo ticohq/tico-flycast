@@ -42,6 +42,7 @@ public:
     void RenderFrame() override;
     bool ShouldExit() const override { return exitRequested_; }
     bool ShouldChainloadLauncher() const override { return chainload_; }
+    bool ShouldRelaunch() const override { return relaunch_; }
     void RequestExit() override { exitRequested_ = true; }
     void Shutdown() override;
 
@@ -70,6 +71,7 @@ private:
     bool overlayReady_ = false;
     bool exitRequested_ = false;
     bool chainload_ = false;
+    bool relaunch_ = false;   // Restart: start this NRO again on exit
     bool frameInFlight_ = false;
     std::string romPath_;
     std::string titleArg_;     // Display title from the launcher (argv[2])
@@ -80,7 +82,7 @@ private:
     // Quick menu
     bool menuOpen_ = false;
     std::vector<std::string> discPaths_;   // Change Disc rows, in menu order
-    std::array<ImTextureID, 4> slotPictures_{}; // Save/Load State pictures, slots 1-4
+    std::array<ImTextureID, 6> slotPictures_{}; // Save/Load State pictures, slots 1-6
     uint64_t navHeldPrev_ = 0;             // directional hold-repeat
     int navRepeatFrames_ = 0;
     static constexpr int kNavInitialDelayFrames = 14;

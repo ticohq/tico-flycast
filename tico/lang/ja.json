@@ -16,11 +16,11 @@
     "emulator_on": "オン",
     "emulator_off": "オフ",
     "emulator_toggle": "切替",
-    "emulator_no_cheats": "チートが見つかりません",
+    "emulator_no_cheats": "sdmc:/tico/cheats/ にチートがありません",
     "emulator_rewind": "Rewind",
     "emulator_no_rewind_points": "Nothing to rewind to yet",
     "emulator_seconds_ago": "%d seconds ago",
-    "emulator_applies_next_launch": "Applies the next time the game starts",
+    "emulator_applies_next_launch": "再起動で反映されます",
     "settings_flycast_32mb_ram": "32MB RAM",
     "settings_flycast_alpha_sorting": "アルファソート",
     "settings_flycast_analog_deadzone": "アナログデッドゾーン",
@@ -135,5 +135,12 @@
     "settings_flycast_arcade_map_button_6": "ボタン6",
     "settings_flycast_arcade_map_button_7": "ボタン7",
     "settings_flycast_arcade_map_button_8": "ボタン8",
-    "emulator_no_preview": "プレビューなし"
+    "emulator_no_preview": "プレビューなし",
+    "emulator_restart": "再起動",
+    "emulator_restart_confirm": "ゲームを再起動しますか？最後にセーブしてからの進行状況は失われます。",
+    "emulator_exit_confirm": "ゲームを終了しますか？最後にセーブしてからの進行状況は失われます。",
+    "emulator_cancel": "キャンセル",
+    "emulator_reset_confirm": "ゲームをリセットしますか？最後にセーブしてからの進行状況は失われます。",
+    "emulator_reset_hint": "本体のリセットボタンと同じです。ゲームを閉じずに最初からやり直します。",
+    "emulator_restart_hint": "ゲームを閉じて開き直します。ticoからもう一度起動したときと同じです。"
 }

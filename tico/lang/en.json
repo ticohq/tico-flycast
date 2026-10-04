@@ -16,11 +16,11 @@
     "emulator_on": "On",
     "emulator_off": "Off",
     "emulator_toggle": "Toggle",
-    "emulator_no_cheats": "No Cheats",
+    "emulator_no_cheats": "No cheats found in sdmc:/tico/cheats/",
     "emulator_rewind": "Rewind",
     "emulator_no_rewind_points": "Nothing to rewind to yet",
     "emulator_seconds_ago": "%d seconds ago",
-    "emulator_applies_next_launch": "Applies the next time the game starts",
+    "emulator_applies_next_launch": "Use Restart to apply",
     "settings_flycast_32mb_ram": "32MB RAM",
     "settings_flycast_alpha_sorting": "Alpha Sorting",
     "settings_flycast_analog_deadzone": "Analog Deadzone",
@@ -135,5 +135,12 @@
     "settings_flycast_arcade_map_button_6": "Button 6",
     "settings_flycast_arcade_map_button_7": "Button 7",
     "settings_flycast_arcade_map_button_8": "Button 8",
-    "emulator_no_preview": "No preview"
+    "emulator_no_preview": "No preview",
+    "emulator_restart": "Restart",
+    "emulator_restart_confirm": "Restart the game? Progress since your last save will be lost.",
+    "emulator_exit_confirm": "Exit the game? Progress since your last save will be lost.",
+    "emulator_cancel": "Cancel",
+    "emulator_reset_confirm": "Reset the game? Progress since your last save will be lost.",
+    "emulator_reset_hint": "Like pressing the console's reset button: the game starts over without closing.",
+    "emulator_restart_hint": "Closes and reopens the game, as if you launched it again from tico."
 }

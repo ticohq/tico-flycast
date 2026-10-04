@@ -117,9 +117,12 @@ int Main::Run(int argc, char **argv)
     Log("tico main loop exit core=%s", runtime_.Name());
 
     const bool chainload = runtime_.ShouldChainloadLauncher();
+    const bool relaunch = runtime_.ShouldRelaunch();
     runtime_.Shutdown();
     ShutdownPlatform();
-    if (chainload)
+    if (relaunch)
+        RelaunchSelf(argc, argv, log_);
+    else if (chainload)
         ChainloadLauncher(log_);
     return 0;
 }

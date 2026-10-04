@@ -16,11 +16,11 @@
     "emulator_on": "Sí",
     "emulator_off": "No",
     "emulator_toggle": "Alternar",
-    "emulator_no_cheats": "No hay trucos",
+    "emulator_no_cheats": "No hay trucos en sdmc:/tico/cheats/",
     "emulator_rewind": "Rewind",
     "emulator_no_rewind_points": "Nothing to rewind to yet",
     "emulator_seconds_ago": "%d seconds ago",
-    "emulator_applies_next_launch": "Applies the next time the game starts",
+    "emulator_applies_next_launch": "Usa Reiniciar para aplicarlo",
     "settings_flycast_32mb_ram": "RAM 32MB",
     "settings_flycast_alpha_sorting": "Ordenación Alpha",
     "settings_flycast_analog_deadzone": "Zona Muerta Analógica",
@@ -135,5 +135,12 @@
     "settings_flycast_arcade_map_button_6": "Botón 6",
     "settings_flycast_arcade_map_button_7": "Botón 7",
     "settings_flycast_arcade_map_button_8": "Botón 8",
-    "emulator_no_preview": "Sin vista previa"
+    "emulator_no_preview": "Sin vista previa",
+    "emulator_restart": "Reiniciar",
+    "emulator_restart_confirm": "¿Reiniciar el juego? Se perderá el progreso desde tu último guardado.",
+    "emulator_exit_confirm": "¿Salir del juego? Se perderá el progreso desde tu último guardado.",
+    "emulator_cancel": "Cancelar",
+    "emulator_reset_confirm": "¿Reiniciar el juego desde cero? Se perderá el progreso desde tu último guardado.",
+    "emulator_reset_hint": "Como pulsar el botón de reinicio de la consola: el juego empieza de nuevo sin cerrarse.",
+    "emulator_restart_hint": "Cierra y vuelve a abrir el juego, como si lo iniciaras de nuevo desde tico."
 }
