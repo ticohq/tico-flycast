@@ -4,6 +4,7 @@
 
 #include "TicoCore.h"
 #include "TicoConfig.h"
+#include "TicoSafeFile.h"
 #include "TicoAudio.h"
 #include "json.hpp"
 #include <SDL.h>
@@ -93,6 +94,11 @@ void TicoCore::LoadSRAM()
     LOG_WARN("CORE", "No SRAM file found (.vmu or .srm) at %s", TicoConfig::SavesPath().c_str());
 }
 
+// Earlier versions kept in backups/ beside each file: the last few sessions'
+// saves, and the state each slot held before it was saved over.
+static constexpr int kSaveBackups = 3;
+static constexpr int kStateBackups = 1;
+
 void TicoCore::SaveSRAM()
 {
     size_t size = retro_get_memory_size(RETRO_MEMORY_SAVE_RAM);
@@ -116,10 +122,8 @@ void TicoCore::SaveSRAM()
 
     std::string savePath = TicoConfig::SavesPath() + filename + ".vmu";
 
-    std::ofstream file(savePath, std::ios::binary);
-    if (file)
+    if (TicoSafeFile::Write(savePath, data, size, kSaveBackups))
     {
-        file.write((const char *)data, size);
         LOG_CORE("Saved SRAM to %s", savePath.c_str());
     }
     else
@@ -948,16 +952,14 @@ void TicoCore::SaveState(const std::string &path)
 
     if (success)
     {
-        FILE *fp = fopen(path.c_str(), "wb");
-        if (fp)
+        // the slot's previous state stays in backups/ (one level)
+        if (TicoSafeFile::Write(path, data.data(), size, kStateBackups))
         {
-            fwrite(data.data(), 1, size, fp);
-            fclose(fp);
             LOG_CORE("Saved state to %s", path.c_str());
         }
         else
         {
-            LOG_ERROR("CORE", "Failed to open file for save state: %s", path.c_str());
+            LOG_ERROR("CORE", "Failed to write save state: %s", path.c_str());
         }
     }
     else

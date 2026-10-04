@@ -7,6 +7,7 @@
 
 #include "FlycastCheats.h"
 #include "FlycastDiscs.h"
+#include "FlycastSaves.h"
 #include "TicoAudio.h"
 #include "TicoConfig.h"
 #include "TicoCore.h"
@@ -447,9 +448,12 @@ bool FlycastRuntime::LoadContent(const std::string &path)
     }
     else
     {
+        FlycastSaves::BackupForSession();
         FlycastCheats::Load(core_->CurrentDiscPath(), TicoConfig::Slug());
         if (!InitOverlay(romPath_))
             LOG_WARN("HOME", "Overlay init failed; continuing without Tico overlay");
+        else
+            offerResume_ = true;
     }
 
     lastTicks_ = SDL_GetTicks();
@@ -691,6 +695,13 @@ void FlycastRuntime::RunMenuAction()
         // same arguments; the game is saved on the way out.
         LOG_INFO("OVERLAY", "Restart requested");
         CloseMenu();
+        // the relaunched NRO finds this and skips the resume prompt: Restart
+        // means from the start
+        if (overlayHost_)
+        {
+            if (FILE *marker = std::fopen(RestartMarkerPath().c_str(), "wb"))
+                std::fclose(marker);
+        }
         relaunch_ = true;
         exitRequested_ = true;
         return;
@@ -741,7 +752,10 @@ void FlycastRuntime::RunMenuAction()
     {
         const int slot = OverlayUI::GetStateSlotForAction(action);
         overlayHost_->LoadStateSlot(slot - 1);
-        OverlayUI::ShowToast(TrFormat("emulator_state_loaded", slot));
+        if (slot == OverlayUI::kAutoStateSlot)
+            OverlayUI::ShowToast(SwitchFrontend::OverlayTranslation::tr("emulator_auto_loaded"));
+        else
+            OverlayUI::ShowToast(TrFormat("emulator_state_loaded", slot));
         CloseMenu();
     }
 }
@@ -882,7 +896,43 @@ void FlycastRuntime::RunFrame()
     UpdateScreenMode();
     frameInFlight_ = TicoVulkan::BeginFrame();
     if (frameInFlight_ && core_)
+    {
         core_->RunFrame();
+        if (offerResume_)
+            OfferResume();
+    }
+}
+
+// Once the game's first frame has run, the menu asks whether to continue from
+// the auto save, if there is one (not after Restart, nor in hardcore).
+void FlycastRuntime::OfferResume()
+{
+    offerResume_ = false;
+    if (!overlayHost_ || !core_)
+        return;
+    if (std::remove(RestartMarkerPath().c_str()) == 0)
+        return;
+    if (core_->IsHardcoreActive() ||
+        !overlayHost_->StateSlotExists(OverlayUI::kAutoStateSlot - 1))
+        return;
+    // tico's General > Continue Last Game
+    const std::string mode = OverlayConfig::ResumeOnLaunch();
+    if (mode == "never")
+        return;
+    if (mode == "always")
+    {
+        overlayHost_->LoadStateSlot(OverlayUI::kAutoStateSlot - 1);
+        OverlayUI::ShowToast(SwitchFrontend::OverlayTranslation::tr("emulator_auto_loaded"));
+        return;
+    }
+    OpenMenu();
+    if (menuOpen_)
+        OverlayUI::ShowResumePrompt();
+}
+
+std::string FlycastRuntime::RestartMarkerPath() const
+{
+    return overlayHost_->SlotStatePath(OverlayUI::kAutoStateSlot - 1) + ".restart";
 }
 
 void FlycastRuntime::RenderFrame()
@@ -908,6 +958,10 @@ void FlycastRuntime::RenderFrame()
 void FlycastRuntime::Shutdown()
 {
     LOG_INFO("HOME", "Shutting down");
+    // the state the game is left in goes to the auto slot (listed first in
+    // Load State), whatever closed it: Exit, Restart or HOME
+    if (overlayHost_ && overlayHost_->IsGameLoaded())
+        overlayHost_->SaveStateSlot(OverlayUI::kAutoStateSlot - 1);
     ShutdownOverlay();
     core_.reset();
     TicoVulkan::Shutdown();
