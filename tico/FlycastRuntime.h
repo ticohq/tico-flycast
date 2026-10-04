@@ -74,6 +74,9 @@ private:
     bool exitRequested_ = false;
     bool chainload_ = false;
     bool relaunch_ = false;   // Restart: start this NRO again on exit
+    bool standalone_ = false;  // started without a game: the library is the menu
+    bool fromLibrary_ = false; // launched from the library: Exit goes back to it
+    std::string argv0_;
     bool offerResume_ = false; // ask to continue from the auto save after the first frame
     bool frameInFlight_ = false;
     std::string romPath_;

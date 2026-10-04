@@ -71,3 +71,6 @@
 [submodule "core/deps/gamesdk"]
 	path = core/deps/gamesdk
 	url = https://github.com/flyinghead/gamesdk.git
+[submodule "tico/deps/SPIRV-Reflect"]
+	path = tico/deps/SPIRV-Reflect
+	url = https://github.com/KhronosGroup/SPIRV-Reflect.git
