@@ -22,6 +22,8 @@ bool IsVisible();
 
 // Edge-triggered menu navigation for the next built frame.
 void FeedNav(const OverlayUI::NavInput& nav);
+// The touchscreen's current state, read while the menu is open.
+void FeedTouch(const OverlayUI::TouchInput& touch);
 
 // Builds this frame's overlay for a width x height surface. Returns the draw
 // data to composite over the game.

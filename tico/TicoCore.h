@@ -60,6 +60,8 @@ public:
     void SetInputState(unsigned port, unsigned id, bool pressed);
     void SetAnalogState(unsigned port, unsigned index, unsigned id, int16_t value);
     void ClearInputs();
+    // Plugs a controller into the port or leaves it empty.
+    void SetPortConnected(unsigned port, bool connected);
 
     /// @brief Video/Audio info
     unsigned int GetFrameTextureID() const { return m_frameTexture; }

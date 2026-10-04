@@ -60,6 +60,7 @@ constexpr float kDesignHeight = 720.0f;
 bool s_initialized = false;
 bool s_visible = false;
 bool s_psm_initialized = false;
+bool s_pl_initialized = false;
 IOverlayHost* s_host = nullptr;
 ImFont* s_description_font = nullptr;
 OverlayUI::NavInput s_nav{};
@@ -67,20 +68,57 @@ OverlayUI::Action s_action = OverlayUI::Action::None;
 ImTextureID s_avatar_texture = 0;
 ImTextureID s_border_texture = 0;
 
-ImFont* AddFirstFont(const std::array<const char*, 4>& paths, float size) {
-    ImGuiIO& io = ImGui::GetIO();
+const char* FirstExisting(const std::array<const char*, 4>& paths) {
     for (const char* path : paths) {
-        std::FILE* fp = std::fopen(path, "rb");
-        if (!fp) {
-            continue;
-        }
-        std::fclose(fp);
-        if (ImFont* font = io.Fonts->AddFontFromFileTTF(path, size)) {
-            LOG_INFO("OVERLAY", "loaded font: %s", path);
-            return font;
+        if (std::FILE* fp = std::fopen(path, "rb")) {
+            std::fclose(fp);
+            return path;
         }
     }
     return nullptr;
+}
+
+// Fills in the characters a font lacks, so every overlay language renders:
+// tico's font.ttf for CJK, then the console's system fonts (which also
+// cover Cyrillic, Korean and traditional Chinese). The first font that has
+// a glyph wins; glyphs load as they are first drawn.
+void MergeFallbacks(float size, const char* skip) {
+    ImGuiIO& io = ImGui::GetIO();
+    ImFontConfig merge;
+    merge.MergeMode = true;
+    if (const char* main = FirstExisting(kFontPaths); main && main != skip) {
+        io.Fonts->AddFontFromFileTTF(main, size, &merge);
+    }
+#ifdef __SWITCH__
+    if (!s_pl_initialized) {
+        s_pl_initialized = R_SUCCEEDED(plInitialize(PlServiceType_User));
+    }
+    if (!s_pl_initialized) {
+        return;
+    }
+    merge.FontDataOwnedByAtlas = false; // the system keeps the font data mapped
+    for (const PlSharedFontType type :
+         {PlSharedFontType_Standard, PlSharedFontType_ChineseSimplified,
+          PlSharedFontType_ExtChineseSimplified, PlSharedFontType_ChineseTraditional,
+          PlSharedFontType_KO}) {
+        PlFontData font{};
+        if (R_SUCCEEDED(plGetSharedFontByType(&font, type))) {
+            io.Fonts->AddFontFromMemoryTTF(font.address, static_cast<int>(font.size), size,
+                                           &merge);
+        }
+    }
+#endif
+}
+
+ImFont* AddFirstFont(const std::array<const char*, 4>& paths, float size) {
+    const char* path = FirstExisting(paths);
+    ImFont* font = path ? ImGui::GetIO().Fonts->AddFontFromFileTTF(path, size) : nullptr;
+    if (!font) {
+        return nullptr;
+    }
+    LOG_INFO("OVERLAY", "loaded font: %s", path);
+    MergeFallbacks(size, path);
+    return font;
 }
 
 // Uploads an RGBA image decoded by stb_image and frees it.
@@ -249,6 +287,10 @@ void Shutdown() {
         psmExit();
         s_psm_initialized = false;
     }
+    if (s_pl_initialized) {
+        plExit();
+        s_pl_initialized = false;
+    }
 #endif
     s_host = nullptr;
     s_description_font = nullptr;
@@ -272,6 +314,10 @@ void FeedNav(const OverlayUI::NavInput& nav) {
     s_nav.right |= nav.right;
     s_nav.accept |= nav.accept;
     s_nav.cancel |= nav.cancel;
+}
+
+void FeedTouch(const OverlayUI::TouchInput& touch) {
+    OverlayUI::FeedTouch(touch);
 }
 
 ImDrawData* BuildFrame(float width, float height, float delta_time) {

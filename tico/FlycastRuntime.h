@@ -71,6 +71,7 @@ private:
     std::string romPath_;
     std::string titleArg_;     // Display title from the launcher (argv[2])
     bool isArcade_ = false;    // NAOMI / Atomiswave (directionals -> analog axis)
+    bool portConnected_[MaxPlayers] = {true, true, true, true}; // as LoadGame leaves them
     uint32_t lastTicks_ = 0;
 
     // Quick menu

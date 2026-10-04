@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <iterator>
 #include <string>
 #include <sys/stat.h>
 #include <vector>
@@ -254,6 +255,64 @@ std::string GameTitleFromPath(const std::string &path)
         title = title.substr(0, dot);
     return title.empty() ? "Flycast" : title;
 }
+
+// A Switch button by the name settings.json stores, as tico's positional
+// PadButton bit; 0 for "None".
+uint64_t PadBitFor(const std::string &name)
+{
+    static const std::pair<const char *, uint64_t> kNames[] = {
+        {"A", Pad_B}, {"B", Pad_A}, {"X", Pad_Y}, {"Y", Pad_X},
+        {"L", Pad_L}, {"R", Pad_R}, {"ZL", Pad_L2}, {"ZR", Pad_R2},
+        {"Plus", Pad_Start}, {"Minus", Pad_Select}, {"StickL", Pad_L3}, {"StickR", Pad_R3},
+        {"Up", Pad_Up}, {"Down", Pad_Down}, {"Left", Pad_Left}, {"Right", Pad_Right},
+    };
+    for (const auto &entry : kNames)
+        if (name == entry.first)
+            return entry.second;
+    return 0;
+}
+
+// Input > button mapping: each pad input with the Switch button it sits on
+// by default. Flycast reads the RetroPad by name on the Dreamcast (RetroPad
+// B is the Dreamcast A) and by number on NAOMI / Atomiswave (RetroPad B is
+// button 1); the defaults keep the layout tico-flycast always had.
+struct ButtonMapping
+{
+    const char *key;
+    const char *fallback;
+    unsigned retroId;
+};
+const ButtonMapping kDreamcastMappings[] = {
+    {"dc_map_a", "A", RETRO_DEVICE_ID_JOYPAD_B},
+    {"dc_map_b", "B", RETRO_DEVICE_ID_JOYPAD_A},
+    {"dc_map_x", "X", RETRO_DEVICE_ID_JOYPAD_Y},
+    {"dc_map_y", "Y", RETRO_DEVICE_ID_JOYPAD_X},
+    {"dc_map_l_trigger", "ZL", RETRO_DEVICE_ID_JOYPAD_L2},
+    {"dc_map_r_trigger", "ZR", RETRO_DEVICE_ID_JOYPAD_R2},
+    {"dc_map_start", "Plus", RETRO_DEVICE_ID_JOYPAD_START},
+    {"dc_map_up", "Up", RETRO_DEVICE_ID_JOYPAD_UP},
+    {"dc_map_down", "Down", RETRO_DEVICE_ID_JOYPAD_DOWN},
+    {"dc_map_left", "Left", RETRO_DEVICE_ID_JOYPAD_LEFT},
+    {"dc_map_right", "Right", RETRO_DEVICE_ID_JOYPAD_RIGHT},
+};
+const ButtonMapping kArcadeMappings[] = {
+    {"arcade_map_button_1", "B", RETRO_DEVICE_ID_JOYPAD_B},
+    {"arcade_map_button_2", "A", RETRO_DEVICE_ID_JOYPAD_A},
+    {"arcade_map_button_3", "R", RETRO_DEVICE_ID_JOYPAD_Y},
+    {"arcade_map_button_4", "Y", RETRO_DEVICE_ID_JOYPAD_X},
+    {"arcade_map_button_5", "X", RETRO_DEVICE_ID_JOYPAD_R},
+    {"arcade_map_button_6", "L", RETRO_DEVICE_ID_JOYPAD_L},
+    {"arcade_map_button_7", "ZR", RETRO_DEVICE_ID_JOYPAD_R2},
+    {"arcade_map_button_8", "ZL", RETRO_DEVICE_ID_JOYPAD_L2},
+    {"arcade_map_start", "Plus", RETRO_DEVICE_ID_JOYPAD_START},
+    {"arcade_map_coin", "Minus", RETRO_DEVICE_ID_JOYPAD_SELECT},
+    {"arcade_map_test", "StickL", RETRO_DEVICE_ID_JOYPAD_L3},
+    {"arcade_map_service", "StickR", RETRO_DEVICE_ID_JOYPAD_R3},
+    {"arcade_map_up", "Up", RETRO_DEVICE_ID_JOYPAD_UP},
+    {"arcade_map_down", "Down", RETRO_DEVICE_ID_JOYPAD_DOWN},
+    {"arcade_map_left", "Left", RETRO_DEVICE_ID_JOYPAD_LEFT},
+    {"arcade_map_right", "Right", RETRO_DEVICE_ID_JOYPAD_RIGHT},
+};
 
 }  // namespace
 
@@ -528,6 +587,7 @@ bool FlycastRuntime::FeedMenu(const FrameInput &input)
         .accept = (input.pressed & Pad_B) != 0,
         .cancel = (input.pressed & Pad_A) != 0,
     });
+    ImGuiOverlay::FeedTouch({input.touchDown, input.touchX, input.touchY});
     return true;
 }
 
@@ -626,43 +686,37 @@ void FlycastRuntime::ApplyCoreInput(const FrameInput &input)
 
     core_->ClearInputs();
 
+    // Resolve the mapping once per frame; every port shares it.
+    struct ResolvedMapping
+    {
+        uint64_t bit;
+        unsigned retroId;
+    };
+    ResolvedMapping mappings[std::size(kArcadeMappings)];
+    size_t mappingCount = 0;
+    if (isArcade_)
+        for (const ButtonMapping &mapping : kArcadeMappings)
+            mappings[mappingCount++] = {PadBitFor(OverlayConfig::GetConfigValue(mapping.key, mapping.fallback)),
+                                        mapping.retroId};
+    else
+        for (const ButtonMapping &mapping : kDreamcastMappings)
+            mappings[mappingCount++] = {PadBitFor(OverlayConfig::GetConfigValue(mapping.key, mapping.fallback)),
+                                        mapping.retroId};
+
     for (unsigned port = 0; port < MaxPlayers; ++port)
     {
         const PlayerInput &player = input.players[port];
         const uint64_t b = player.buttons;
-        auto down = [&](PadButton bit) { return (b & bit) != 0; };
 
-        if (isArcade_)
-        {
-            // Arcade layout based on observed game actions:
-            // Switch Y uses the low-kick source, Switch X uses the high-kick source.
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_B, down(Pad_A));
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_A, down(Pad_B));
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_X, down(Pad_X));
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_R, down(Pad_Y));
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_L, down(Pad_L));
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_Y, down(Pad_R));
-        }
-        else
-        {
-            // Dreamcast follows physical disposition through the neutral pad map.
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_A, down(Pad_A));
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_B, down(Pad_B));
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_X, down(Pad_X));
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_Y, down(Pad_Y));
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_L, down(Pad_L));
-            core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_R, down(Pad_R));
-        }
-        core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_START, down(Pad_Start));
-        core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_SELECT, down(Pad_Select));
-        core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_UP, down(Pad_Up));
-        core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_DOWN, down(Pad_Down));
-        core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_LEFT, down(Pad_Left));
-        core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_RIGHT, down(Pad_Right));
-        core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_L2, down(Pad_L2));
-        core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_R2, down(Pad_R2));
-        core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_L3, down(Pad_L3));
-        core_->SetInputState(port, RETRO_DEVICE_ID_JOYPAD_R3, down(Pad_R3));
+        // Several pad inputs may share a Switch button, so only ever press.
+        uint32_t pressed = 0; // RetroPad ids, as bits
+        for (size_t i = 0; i < mappingCount; ++i)
+            if (b & mappings[i].bit)
+            {
+                core_->SetInputState(port, mappings[i].retroId, true);
+                pressed |= 1u << mappings[i].retroId;
+            }
+        auto down = [&](unsigned retroId) { return (pressed & (1u << retroId)) != 0; };
 
         core_->SetAnalogState(port, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X, player.leftStickX);
         core_->SetAnalogState(port, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y, player.leftStickY);
@@ -674,13 +728,13 @@ void FlycastRuntime::ApplyCoreInput(const FrameInput &input)
         // Dreamcast keeps its native d-pad + analog and is left alone.
         if (isArcade_)
         {
-            // d-pad -> axis
-            if (down(Pad_Left) || down(Pad_Right))
+            // joystick directions -> axis
+            if (down(RETRO_DEVICE_ID_JOYPAD_LEFT) || down(RETRO_DEVICE_ID_JOYPAD_RIGHT))
                 core_->SetAnalogState(port, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X,
-                                      down(Pad_Left) ? -0x7fff : 0x7fff);
-            if (down(Pad_Up) || down(Pad_Down))
+                                      down(RETRO_DEVICE_ID_JOYPAD_LEFT) ? -0x7fff : 0x7fff);
+            if (down(RETRO_DEVICE_ID_JOYPAD_UP) || down(RETRO_DEVICE_ID_JOYPAD_DOWN))
                 core_->SetAnalogState(port, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y,
-                                      down(Pad_Up) ? -0x7fff : 0x7fff);
+                                      down(RETRO_DEVICE_ID_JOYPAD_UP) ? -0x7fff : 0x7fff);
 
             // stick -> d-pad (lenient threshold to keep diagonals)
             const int16_t kDirThreshold = 0x2800;
@@ -701,6 +755,19 @@ void FlycastRuntime::HandleInput(const FrameInput &input)
     RunMenuAction();
     if (exitRequested_)
         return;
+
+    // A Dreamcast sees a controller in every port the core has one plugged
+    // into, and some games (Hoyle Casino) then wait for all four players to
+    // join. Plug in only the Switch controllers that are connected, following
+    // them as they come and go; player 1's port always has one. Arcade boards
+    // read both players through the JVS I/O board and keep all their ports.
+    if (core_ && !isArcade_)
+        for (unsigned port = 1; port < MaxPlayers; ++port)
+            if (input.players[port].connected != portConnected_[port])
+            {
+                portConnected_[port] = input.players[port].connected;
+                core_->SetPortConnected(port, portConnected_[port]);
+            }
 
     // Start+Select only ever opens the menu; B closes it. While the combo is
     // held it is kept from the game.

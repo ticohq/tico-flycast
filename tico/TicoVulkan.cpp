@@ -915,7 +915,12 @@ void EndFrame()
         rpbi.renderArea.offset = vk::Offset2D(0, 0);
         rpbi.renderArea.extent = s_swapExtent;
         f.cmd.beginRenderPass(rpbi, vk::SubpassContents::eInline);
-        ImGui_ImplVulkan_RenderDrawData(s_overlayDrawData, static_cast<VkCommandBuffer>(f.cmd));
+        {
+            // Font glyphs drawn for the first time are uploaded here, on the
+            // queue the core also submits to from its render thread.
+            std::lock_guard<std::mutex> guard(s_queueMutex);
+            ImGui_ImplVulkan_RenderDrawData(s_overlayDrawData, static_cast<VkCommandBuffer>(f.cmd));
+        }
         f.cmd.endRenderPass();
 
         TransitionLayout(f.cmd, swapImage,
@@ -1022,7 +1027,7 @@ bool InitOverlayRenderer()
     }
 
 #ifdef IMGUI_IMPL_VULKAN_NO_PROTOTYPES
-    if (!ImGui_ImplVulkan_LoadFunctions(ImGuiVulkanLoader, nullptr))
+    if (!ImGui_ImplVulkan_LoadFunctions(VK_API_VERSION_1_1, ImGuiVulkanLoader, nullptr))
     {
         VK_LOG_ERROR("ImGui Vulkan function loading failed");
         ShutdownOverlayRendererInternal();
@@ -1031,16 +1036,17 @@ bool InitOverlayRenderer()
 #endif
 
     ImGui_ImplVulkan_InitInfo info{};
+    info.ApiVersion = VK_API_VERSION_1_1;
     info.Instance = static_cast<VkInstance>(s_instance);
     info.PhysicalDevice = static_cast<VkPhysicalDevice>(s_gpu);
     info.Device = static_cast<VkDevice>(s_device);
     info.QueueFamily = s_queueFamilyIndex;
     info.Queue = static_cast<VkQueue>(s_queue);
     info.DescriptorPool = static_cast<VkDescriptorPool>(s_overlayDescriptorPool);
-    info.RenderPass = static_cast<VkRenderPass>(s_overlayRenderPass);
+    info.PipelineInfoMain.RenderPass = static_cast<VkRenderPass>(s_overlayRenderPass);
     info.MinImageCount = 2;
     info.ImageCount = static_cast<uint32_t>(s_swapImages.size());
-    info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
     if (!ImGui_ImplVulkan_Init(&info))
     {
@@ -1048,14 +1054,9 @@ bool InitOverlayRenderer()
         ShutdownOverlayRendererInternal();
         return false;
     }
+    // The font atlas is built and grown by the backend as glyphs are first
+    // drawn, so every language's characters load from the fonts on demand.
     s_overlayReady = true;
-
-    if (!ImGui_ImplVulkan_CreateFontsTexture())
-    {
-        VK_LOG_ERROR("ImGui_ImplVulkan_CreateFontsTexture failed");
-        ShutdownOverlayRendererInternal();
-        return false;
-    }
 
     VK_LOG_INFO("Overlay renderer initialized");
     return true;

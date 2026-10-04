@@ -914,6 +914,12 @@ void TicoCore::ClearInputs()
     memset(m_analogState, 0, sizeof(m_analogState));
 }
 
+void TicoCore::SetPortConnected(unsigned port, bool connected)
+{
+    if (port < 4)
+        retro_set_controller_port_device(port, connected ? RETRO_DEVICE_JOYPAD : RETRO_DEVICE_NONE);
+}
+
 //==============================================================================
 // Save States
 //==============================================================================
