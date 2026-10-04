@@ -67,5 +67,6 @@
     "settings_flycast_arcade_map_button_5": "Taste 5",
     "settings_flycast_arcade_map_button_6": "Taste 6",
     "settings_flycast_arcade_map_button_7": "Taste 7",
-    "settings_flycast_arcade_map_button_8": "Taste 8"
+    "settings_flycast_arcade_map_button_8": "Taste 8",
+    "emulator_no_preview": "Keine Vorschau"
 }

@@ -18,6 +18,8 @@
 #include "overlay/translation_manager.h"
 
 #include "imgui.h"
+#include "deps/stb/stb_image.h"
+#include "../core/deps/stb/stb_image_write.h" // built with the core
 
 #include <SDL.h>
 #include <SDL_mixer.h>
@@ -25,6 +27,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <ctime>
 #include <iterator>
 #include <string>
 #include <sys/stat.h>
@@ -58,8 +61,21 @@ public:
     }
     void SaveStateSlot(int slot) override
     {
-        if (core_) core_->SaveState(StatePath(slot));
+        if (!core_)
+            return;
+        const std::string path = StatePath(slot);
+        core_->SaveState(path);
+        struct stat st;
+        if (stat(path.c_str(), &st) != 0)
+            return;
+        // a small picture of the game beside the state, for the Save/Load panel
+        std::vector<uint8_t> rgba;
+        uint32_t w = 0, h = 0;
+        if (TicoVulkan::CaptureGameImage(256, 192, rgba, w, h))
+            stbi_write_png((path + ".png").c_str(), (int)w, (int)h, 4, rgba.data(), (int)w * 4);
     }
+
+    std::string SlotStatePath(int slot) const { return StatePath(slot); }
     void LoadStateSlot(int slot) override
     {
         if (core_) core_->LoadState(StatePath(slot));
@@ -456,6 +472,33 @@ bool FlycastRuntime::InitOverlay(const std::string &romPath)
     OverlayUI::SetSlotOccupiedCallback([host](int slot) {
         return slot >= 1 && host->StateSlotExists(slot - 1);
     });
+    // Save/Load State show each slot's picture and when it was saved.
+    slotPictures_ = {};
+    OverlayUI::SetSlotPreviewCallback([this, host](int slot) {
+        OverlayUI::SlotPreview preview;
+        if (slot < 1 || slot > (int)slotPictures_.size())
+            return preview;
+        ImTextureID &picture = slotPictures_[slot - 1];
+        host->DestroyTexture(picture); // the slot may have been saved again
+        picture = 0;
+        const std::string path = host->SlotStatePath(slot - 1);
+        struct stat st;
+        if (stat(path.c_str(), &st) != 0)
+            return preview;
+        char when[32];
+        std::strftime(when, sizeof(when), "%Y-%m-%d %H:%M", std::localtime(&st.st_mtime));
+        preview.saved_at = when;
+        int w = 0, h = 0, channels = 0;
+        if (unsigned char *rgba = stbi_load((path + ".png").c_str(), &w, &h, &channels, 4))
+        {
+            picture = host->CreateTextureRGBA(rgba, w, h);
+            stbi_image_free(rgba);
+        }
+        preview.texture = (unsigned long long)picture;
+        if (core_ && core_->GetAspectRatio() > 0.1f)
+            preview.aspect = core_->GetAspectRatio();
+        return preview;
+    });
     OverlayUI::SetDiscCallback([this] {
         std::vector<OverlayUI::DiscMenuEntry> entries;
         discPaths_.clear();
@@ -482,6 +525,8 @@ void FlycastRuntime::ShutdownOverlay()
     if (overlayReady_)
     {
         OverlayUI::SetSlotOccupiedCallback(nullptr);
+        OverlayUI::SetSlotPreviewCallback(nullptr);
+        slotPictures_ = {}; // freed with the overlay's textures below
         OverlayUI::SetDiscCallback(nullptr);
         ImGuiOverlay::Shutdown(); // frees textures via overlayHost_ (still alive)
     }

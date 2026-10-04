@@ -11,6 +11,9 @@
 
 #include <SDL.h>
 
+#include <array>
+
+#include "imgui.h"
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -77,6 +80,7 @@ private:
     // Quick menu
     bool menuOpen_ = false;
     std::vector<std::string> discPaths_;   // Change Disc rows, in menu order
+    std::array<ImTextureID, 4> slotPictures_{}; // Save/Load State pictures, slots 1-4
     uint64_t navHeldPrev_ = 0;             // directional hold-repeat
     int navRepeatFrames_ = 0;
     static constexpr int kNavInitialDelayFrames = 14;

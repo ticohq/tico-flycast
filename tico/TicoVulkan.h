@@ -6,6 +6,8 @@
 /// image onto the current swapchain image and present.
 #pragma once
 
+#include <vector>
+
 #include "imgui.h"
 
 #include <vulkan/vulkan.hpp>
@@ -80,5 +82,10 @@ void BeginOverlayFrame();
 void SetOverlayDrawData(ImDrawData* drawData);
 ImTextureID CreateOverlayTextureRGBA(const unsigned char* rgba, uint32_t width, uint32_t height);
 void DestroyOverlayTexture(ImTextureID texture);
+
+/// The core's last frame, shrunk to fit maxWidth x maxHeight (aspect kept),
+/// as tightly packed RGBA. False when there is no frame yet.
+bool CaptureGameImage(uint32_t maxWidth, uint32_t maxHeight, std::vector<uint8_t>& rgba,
+                      uint32_t& width, uint32_t& height);
 
 }  // namespace TicoVulkan

@@ -1080,6 +1080,126 @@ void SetOverlayDrawData(ImDrawData* drawData)
     s_overlayDrawData = drawData;
 }
 
+bool CaptureGameImage(uint32_t maxWidth, uint32_t maxHeight, std::vector<uint8_t>& rgba,
+                      uint32_t& width, uint32_t& height)
+{
+    if (!s_device || !s_commandPool || !s_lastImageValid || !s_lastImage.create_info.image)
+        return false;
+    const uint32_t srcW = s_sourceExtent.width ? s_sourceExtent.width : s_swapExtent.width;
+    const uint32_t srcH = s_sourceExtent.height ? s_sourceExtent.height : s_swapExtent.height;
+    if (!srcW || !srcH || !maxWidth || !maxHeight)
+        return false;
+    const float fit = std::min({1.0f, (float)maxWidth / srcW, (float)maxHeight / srcH});
+    width = std::max(1u, (uint32_t)(srcW * fit));
+    height = std::max(1u, (uint32_t)(srcH * fit));
+
+    // The blit into a small RGBA image does the shrinking and any BGRA
+    // swizzle; the copy then brings it to host-visible memory.
+    vk::Image small;
+    vk::DeviceMemory smallMemory;
+    vk::Buffer readback;
+    vk::DeviceMemory readbackMemory;
+    vk::CommandBuffer cmd;
+    bool ok = false;
+    try
+    {
+        std::lock_guard<std::mutex> guard(s_queueMutex);
+        s_device.waitIdle(); // the core's frame is finished and nothing else uses the queue
+
+        vk::ImageCreateInfo imageInfo;
+        imageInfo.imageType = vk::ImageType::e2D;
+        imageInfo.format = vk::Format::eR8G8B8A8Unorm;
+        imageInfo.extent = vk::Extent3D(width, height, 1);
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.samples = vk::SampleCountFlagBits::e1;
+        imageInfo.tiling = vk::ImageTiling::eOptimal;
+        imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc;
+        imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+        small = s_device.createImage(imageInfo);
+        vk::MemoryRequirements imageReq = s_device.getImageMemoryRequirements(small);
+        uint32_t imageType = 0;
+        if (!FindMemoryType(imageReq.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal, imageType))
+            throw std::runtime_error("capture image memory");
+        smallMemory = s_device.allocateMemory(vk::MemoryAllocateInfo(imageReq.size, imageType));
+        s_device.bindImageMemory(small, smallMemory, 0);
+
+        const vk::DeviceSize size = (vk::DeviceSize)width * height * 4;
+        vk::BufferCreateInfo bufferInfo;
+        bufferInfo.size = size;
+        bufferInfo.usage = vk::BufferUsageFlagBits::eTransferDst;
+        readback = s_device.createBuffer(bufferInfo);
+        vk::MemoryRequirements bufferReq = s_device.getBufferMemoryRequirements(readback);
+        uint32_t bufferType = 0;
+        if (!FindMemoryType(bufferReq.memoryTypeBits,
+                            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                            bufferType))
+            throw std::runtime_error("capture readback memory");
+        readbackMemory = s_device.allocateMemory(vk::MemoryAllocateInfo(bufferReq.size, bufferType));
+        s_device.bindBufferMemory(readback, readbackMemory, 0);
+
+        cmd = s_device.allocateCommandBuffers(
+            vk::CommandBufferAllocateInfo(s_commandPool, vk::CommandBufferLevel::ePrimary, 1))[0];
+        cmd.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+
+        vk::Image coreImage(s_lastImage.create_info.image);
+        const vk::ImageLayout coreLayout = static_cast<vk::ImageLayout>(s_lastImage.image_layout);
+        TransitionLayout(cmd, coreImage, coreLayout, vk::ImageLayout::eTransferSrcOptimal,
+                         vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
+                         vk::AccessFlagBits::eTransferRead,
+                         vk::PipelineStageFlagBits::eAllCommands, vk::PipelineStageFlagBits::eTransfer);
+        TransitionLayout(cmd, small, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+                         {}, vk::AccessFlagBits::eTransferWrite,
+                         vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer);
+
+        vk::ImageBlit blit;
+        blit.srcSubresource = vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1);
+        blit.srcOffsets[1] = vk::Offset3D((int32_t)srcW, (int32_t)srcH, 1);
+        blit.dstSubresource = blit.srcSubresource;
+        blit.dstOffsets[1] = vk::Offset3D((int32_t)width, (int32_t)height, 1);
+        cmd.blitImage(coreImage, vk::ImageLayout::eTransferSrcOptimal, small,
+                      vk::ImageLayout::eTransferDstOptimal, blit, vk::Filter::eLinear);
+
+        TransitionLayout(cmd, coreImage, vk::ImageLayout::eTransferSrcOptimal, coreLayout,
+                         vk::AccessFlagBits::eTransferRead,
+                         vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite,
+                         vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eAllCommands);
+        TransitionLayout(cmd, small, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eTransferSrcOptimal,
+                         vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eTransferRead,
+                         vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer);
+
+        vk::BufferImageCopy region;
+        region.imageSubresource = vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1);
+        region.imageExtent = vk::Extent3D(width, height, 1);
+        cmd.copyImageToBuffer(small, vk::ImageLayout::eTransferSrcOptimal, readback, region);
+        cmd.end();
+
+        vk::SubmitInfo submit;
+        submit.commandBufferCount = 1;
+        submit.pCommandBuffers = &cmd;
+        s_queue.submit(submit, VK_NULL_HANDLE);
+        s_queue.waitIdle();
+
+        rgba.resize((size_t)size);
+        void* mapped = s_device.mapMemory(readbackMemory, 0, size);
+        std::memcpy(rgba.data(), mapped, (size_t)size);
+        s_device.unmapMemory(readbackMemory);
+        for (size_t i = 3; i < rgba.size(); i += 4)
+            rgba[i] = 255; // the frame is opaque whatever its alpha holds
+        ok = true;
+    }
+    catch (const std::exception& e)
+    {
+        VK_LOG_ERROR("Game image capture failed: %s", e.what());
+    }
+    if (cmd) s_device.freeCommandBuffers(s_commandPool, cmd);
+    if (readback) s_device.destroyBuffer(readback);
+    if (readbackMemory) s_device.freeMemory(readbackMemory);
+    if (small) s_device.destroyImage(small);
+    if (smallMemory) s_device.freeMemory(smallMemory);
+    return ok;
+}
+
 ImTextureID CreateOverlayTextureRGBA(const unsigned char* rgba, uint32_t width, uint32_t height)
 {
     if (!s_overlayReady || !s_device || !s_commandPool || !rgba || width == 0 || height == 0)

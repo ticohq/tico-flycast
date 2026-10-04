@@ -67,5 +67,6 @@
     "settings_flycast_arcade_map_button_5": "Кнопка 5",
     "settings_flycast_arcade_map_button_6": "Кнопка 6",
     "settings_flycast_arcade_map_button_7": "Кнопка 7",
-    "settings_flycast_arcade_map_button_8": "Кнопка 8"
+    "settings_flycast_arcade_map_button_8": "Кнопка 8",
+    "emulator_no_preview": "Нет превью"
 }
