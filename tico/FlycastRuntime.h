@@ -54,6 +54,8 @@ private:
     void ApplyCoreInput(const FrameInput &input);
     void OpenMenu();
     void CloseMenu();
+    void OfferResume();
+    std::string RestartMarkerPath() const;
     /// Feeds the open menu; returns false when the menu is closed.
     bool FeedMenu(const FrameInput &input);
     /// Carries out what the menu chose on the last built frame.
@@ -72,6 +74,7 @@ private:
     bool exitRequested_ = false;
     bool chainload_ = false;
     bool relaunch_ = false;   // Restart: start this NRO again on exit
+    bool offerResume_ = false; // ask to continue from the auto save after the first frame
     bool frameInFlight_ = false;
     std::string romPath_;
     std::string titleArg_;     // Display title from the launcher (argv[2])
