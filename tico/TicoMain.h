@@ -102,6 +102,8 @@ public:
     virtual void RenderFrame() = 0;
     virtual bool ShouldExit() const = 0;
     virtual bool ShouldChainloadLauncher() const { return false; }
+    /// Start this NRO again, with the arguments it was launched with, once it exits.
+    virtual bool ShouldRelaunch() const { return false; }
     virtual void RequestExit() = 0;
     virtual void Shutdown() = 0;
 };

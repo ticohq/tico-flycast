@@ -210,6 +210,7 @@ if(NINTENDO_SWITCH)
 				tico/TicoVulkan.cpp
 				tico/TicoStubs.cpp
 				tico/FlycastDiscs.cpp
+				tico/FlycastCheats.cpp
 				tico/UsbStorage.cpp
 				tico/overlay/imgui_overlay.cpp
 				tico/overlay/overlay_ui.cpp

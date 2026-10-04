@@ -82,6 +82,10 @@ public:
     unsigned GetCurrentDiskIndex() const;
     bool SwapDisk(unsigned index);
     bool SwapDiskByPath(const std::string &discPath);
+    /// @brief The disc in the drive (or about to go in), else the game's path
+    std::string CurrentDiscPath() const;
+    /// @brief A swap is waiting for its delayed insert
+    bool IsSwapPending() const { return m_swapPending; }
     bool GetDiskLabel(unsigned index, std::string &label) const;
 
     /// @brief Save states
@@ -113,7 +117,11 @@ public:
         m_audioFlushCallback = flushCb;
     }
 
+    /// @brief Whether RetroAchievements hardcore is on (no cheats or loading)
+    bool IsHardcoreActive() const;
+
 private:
+    int FindDiscIndex(const std::string &path) const;
     void InitializeCore();
     void SetupCallbacks();
     bool InitEGLDualContext();

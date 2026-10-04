@@ -45,4 +45,25 @@ void ChainloadLauncher(const LogCallback &log)
 #endif
 }
 
+void RelaunchSelf(int argc, char **argv, const LogCallback &log)
+{
+#ifdef __SWITCH__
+    if (argc < 1 || !argv || !argv[0])
+        return;
+    // hbloader splits the argument string on spaces outside quotes
+    std::string args;
+    for (int i = 0; i < argc && argv[i]; ++i)
+        args += (i ? " \"" : "\"") + std::string(argv[i]) + "\"";
+    static char saved[2048]; // envSetNextLoad keeps the pointer until exit
+    std::snprintf(saved, sizeof(saved), "%s", args.c_str());
+    envSetNextLoad(argv[0], saved);
+    if (log)
+        log(std::string("Relaunching ") + argv[0]);
+#else
+    (void)argc;
+    (void)argv;
+    (void)log;
+#endif
+}
+
 }  // namespace Tico

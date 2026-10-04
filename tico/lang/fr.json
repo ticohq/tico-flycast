@@ -16,11 +16,11 @@
     "emulator_on": "Oui",
     "emulator_off": "Non",
     "emulator_toggle": "Basculer",
-    "emulator_no_cheats": "Aucun code",
+    "emulator_no_cheats": "Aucun code dans sdmc:/tico/cheats/",
     "emulator_rewind": "Rewind",
     "emulator_no_rewind_points": "Nothing to rewind to yet",
     "emulator_seconds_ago": "%d seconds ago",
-    "emulator_applies_next_launch": "Applies the next time the game starts",
+    "emulator_applies_next_launch": "Utilisez Redémarrer pour l'appliquer",
     "settings_flycast_32mb_ram": "RAM 32 Mo",
     "settings_flycast_alpha_sorting": "Tri Alpha",
     "settings_flycast_analog_deadzone": "Zone Morte Analogique",
@@ -135,5 +135,12 @@
     "settings_flycast_arcade_map_button_6": "Bouton 6",
     "settings_flycast_arcade_map_button_7": "Bouton 7",
     "settings_flycast_arcade_map_button_8": "Bouton 8",
-    "emulator_no_preview": "Pas d'aperçu"
+    "emulator_no_preview": "Pas d'aperçu",
+    "emulator_restart": "Redémarrer",
+    "emulator_restart_confirm": "Redémarrer le jeu ? La progression depuis votre dernière sauvegarde sera perdue.",
+    "emulator_exit_confirm": "Quitter le jeu ? La progression depuis votre dernière sauvegarde sera perdue.",
+    "emulator_cancel": "Annuler",
+    "emulator_reset_confirm": "Réinitialiser le jeu ? La progression depuis votre dernière sauvegarde sera perdue.",
+    "emulator_reset_hint": "Comme le bouton reset de la console : le jeu recommence sans se fermer.",
+    "emulator_restart_hint": "Ferme et rouvre le jeu, comme si vous le relanciez depuis tico."
 }
