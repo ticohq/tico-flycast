@@ -57,6 +57,7 @@ enum PadButton : uint64_t
 /// use the SDL convention: range -32768..32767, +Y is down.
 struct PlayerInput
 {
+    bool connected = false; // player 1 always counts as connected
     uint64_t buttons = 0;
     uint64_t pressed = 0;
     uint64_t released = 0;
@@ -71,6 +72,11 @@ struct PlayerInput
 struct FrameInput
 {
     PlayerInput players[MaxPlayers] = {};
+
+    // first finger on the touchscreen, in its 1280x720 coordinates
+    bool touchDown = false;
+    float touchX = 0.0f;
+    float touchY = 0.0f;
 
     uint64_t buttons = 0;
     uint64_t pressed = 0;

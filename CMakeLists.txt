@@ -210,6 +210,7 @@ if(NINTENDO_SWITCH)
 				tico/TicoVulkan.cpp
 				tico/TicoStubs.cpp
 				tico/FlycastDiscs.cpp
+				tico/UsbStorage.cpp
 				tico/overlay/imgui_overlay.cpp
 				tico/overlay/overlay_ui.cpp
 				tico/overlay/ra_alerts.cpp
@@ -232,6 +233,11 @@ if(NINTENDO_SWITCH)
 			# its own (newer) vulkan headers. Keep the bundled Vulkan-Headers
 			# first so vulkan.hpp and vulkan_core.h versions match.
 			target_include_directories(${PROJECT_NAME} BEFORE PRIVATE core/deps/Vulkan-Headers/include)
+			# libusbhsfs (FAT/exFAT) that also reads NTFS, read-only, through usbntfs;
+			# linked by path so portlibs' FAT-only copy is not picked up instead.
+			target_link_libraries(${PROJECT_NAME} PRIVATE
+				${CMAKE_CURRENT_SOURCE_DIR}/tico/deps/usbhsfs/lib/libusbhsfs.a
+				${CMAKE_CURRENT_SOURCE_DIR}/tico/deps/usbhsfs/lib/libusbntfs.a)
 			target_link_libraries(${PROJECT_NAME} PRIVATE -lcurl -lSDL2_mixer -lmpg123 -lmodplug -lopusfile -lopus -lvorbisidec -logg SDL2)
 
 			# NVK (loaderless libvulkan + nouveau DRM) - replaces the EGL/GL
@@ -260,6 +266,7 @@ if(NINTENDO_SWITCH)
 				core/deps/imgui/imgui_draw.cpp
 				core/deps/imgui/imgui_tables.cpp
 				core/deps/imgui/imgui_widgets.cpp
+				core/deps/imgui/imgui_cjk.cpp
 				core/deps/imgui/backends/imgui_impl_vulkan.cpp)
 			target_include_directories(${PROJECT_NAME} PRIVATE
 				core/deps/imgui

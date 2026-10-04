@@ -4,6 +4,7 @@
 /// knows nothing about flycast/libretro/SDL. Mirrors tico-ppsspp's TicoMain.cpp.
 
 #include "TicoMain.h"
+#include "UsbStorage.h"
 
 #include "TicoChainload.h"
 #include "TicoConfig.h"
@@ -78,6 +79,16 @@ int Main::Run(int argc, char **argv)
     if (!InitPlatform())
         return 1;
 
+    // tico names a game on a USB drive by the drive's id: find where it is mounted
+    if (UsbStorage::IsToken(launch.contentPath))
+    {
+        const std::string mounted = UsbStorage::Resolve(launch.contentPath);
+        if (mounted.empty())
+            Log("USB drive for %s is not connected", launch.contentPath.c_str());
+        else
+            launch.contentPath = mounted;
+    }
+
     Log("tico main start core=%s argc=%d content=%s", runtime_.Name(), argc,
         launch.contentPath.empty() ? "(default)" : launch.contentPath.c_str());
 
@@ -144,7 +155,9 @@ bool Main::InitPlatform()
         return false;
     }
 
+    UsbStorage::Init(); // drives mount in the background
     padConfigureInput(MaxPlayers, HidNpadStyleSet_NpadStandard);
+    hidInitializeTouchScreen();
     padInitializeDefault(&g_pads[0]);
     for (unsigned player = 1; player < MaxPlayers; ++player)
         padInitialize(&g_pads[player], static_cast<HidNpadIdType>(HidNpadIdType_No1 + player));
@@ -158,6 +171,7 @@ void Main::ShutdownPlatform()
 {
     platformReady_ = false;
 #ifdef __SWITCH__
+    UsbStorage::Shutdown(); // flush and unmount before tico takes over again
     romfsExit();
     if (socketReady_)
     {
@@ -181,6 +195,7 @@ FrameInput Main::PollInput()
         padUpdate(&g_pads[player]);
 
         PlayerInput &slot = in.players[player];
+        slot.connected = player == 0 || padIsConnected(&g_pads[player]);
         slot.buttons = MapButtons(padGetButtons(&g_pads[player]));
         const HidAnalogStickState left = padGetStickPos(&g_pads[player], 0);
         const HidAnalogStickState right = padGetStickPos(&g_pads[player], 1);
@@ -192,6 +207,13 @@ FrameInput Main::PollInput()
         slot.pressed = slot.buttons & ~prevButtons_[player];
         slot.released = prevButtons_[player] & ~slot.buttons;
         prevButtons_[player] = slot.buttons;
+    }
+    HidTouchScreenState touch{};
+    if (hidGetTouchScreenStates(&touch, 1) > 0 && touch.count > 0)
+    {
+        in.touchDown = true;
+        in.touchX = static_cast<float>(touch.touches[0].x);
+        in.touchY = static_cast<float>(touch.touches[0].y);
     }
 #endif
     in.buttons = in.players[0].buttons;
