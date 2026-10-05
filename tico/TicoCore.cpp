@@ -1873,6 +1873,9 @@ static Disc* s_hashDisk = nullptr;
 // We replicate that behavior here, reading directly from the track BIN file.
 
 struct TicoRATrack {
+    // A .chd (or any track that isn't a plain BIN file) is read through the
+    // Disc instead: sector numbers are LBAs, FAD - 150.
+    const Track* track = nullptr;
     hostfs::File* file;    // The track's BIN file (borrowed from RawTrackFile)
     uint32_t sector_size;  // 2352, 2048, 2336
     uint32_t header_size;  // Bytes to skip to get 2048-byte user data (16 for MODE1/2352, 24 for MODE2/2352, 0 for 2048)
@@ -1904,7 +1907,17 @@ static void* tico_cdreader_open_track(const char* path, uint32_t track) {
 
     // Get the underlying RawTrackFile to access its FILE* and sector format
     RawTrackFile* rtf = dynamic_cast<RawTrackFile*>(t->file);
-    if (!rtf) return nullptr;
+    if (!rtf) {
+        TicoRATrack* rat = new TicoRATrack();
+        rat->track = t;
+        rat->file = nullptr;
+        rat->sector_size = 2048;
+        rat->header_size = 0;
+        rat->first_sector = t->StartFAD >= 150 ? t->StartFAD - 150 : 0;
+        rat->owns_file = false;
+        LOG_CORE("RA: Opened track %u through the disc (StartFAD=%u)", track, t->StartFAD);
+        return rat;
+    }
 
     TicoRATrack* rat = new TicoRATrack();
     rat->file = rtf->file;
@@ -1959,6 +1972,30 @@ static void* tico_cdreader_open_track(const char* path, uint32_t track) {
 
 static size_t tico_cdreader_read_sector(void* track_handle, uint32_t sector, void* buffer, size_t requested_bytes) {
     TicoRATrack* rat = static_cast<TicoRATrack*>(track_handle);
+    if (rat && rat->track) {
+        // only this track's sectors, so rcheevos can look in another one
+        const u32 fad = sector + 150;
+        const Track* t = rat->track;
+        if (!s_hashDisk || fad < t->StartFAD || (t->EndFAD != 0 && fad > t->EndFAD))
+            return 0;
+        // read the sector from the track itself (Disc::ReadSectors also updates
+        // the drive's subchannel, which the running game owns) and take its
+        // user data
+        u8 raw[2448];
+        u8 subcode[96];
+        SectorFormat format;
+        SubcodeFormat subFormat;
+        if (!const_cast<Track*>(t)->Read(fad, raw, &format, subcode, &subFormat))
+            return 0;
+        u32 offset = 0;
+        if (format == SECFMT_2352 || format == SECFMT_2448_MODE2)
+            offset = raw[15] == 2 ? 24 : 16; // mode 2 form 1 has a subheader
+        else if (format == SECFMT_2336_MODE2)
+            offset = 8;
+        requested_bytes = std::min<size_t>(requested_bytes, 2048);
+        memcpy(buffer, raw + offset, requested_bytes);
+        return requested_bytes;
+    }
     if (!rat || !rat->file) return 0;
 
     if (sector < rat->first_sector) return 0;
