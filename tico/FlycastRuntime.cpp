@@ -698,6 +698,7 @@ void FlycastRuntime::OpenMenu()
     if (!overlayReady_ || menuOpen_)
         return;
     menuOpen_ = true;
+    TicoCore::StopRumble(); // the game is paused
     navHeldPrev_ = 0;
     navRepeatFrames_ = 0;
     OverlayUI::SetHardcoreMode(core_ && core_->IsHardcoreActive());
@@ -1076,6 +1077,7 @@ void FlycastRuntime::Shutdown()
     FlycastShaders::Shutdown();
     ShutdownOverlay();
     core_.reset();
+    TicoCore::StopRumble();
     TicoVulkan::Shutdown();
 
     if (audio_)

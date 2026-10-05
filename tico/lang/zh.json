@@ -194,5 +194,7 @@
     "emulator_pad_joycon_left": "Joy-Con (L)",
     "emulator_pad_joycon_right": "Joy-Con (R)",
     "emulator_pad_gamecube": "GameCube 手柄",
-    "emulator_pad_other": "手柄"
+    "emulator_pad_other": "手柄",
+    "settings_flycast_vibration": "振动",
+    "settings_flycast_vibration_strength": "振动强度"
 }

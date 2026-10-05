@@ -19,6 +19,7 @@
 #include <cctype>
 #include "TicoLogger.h"
 #include "FlycastDiscs.h"
+#include "overlay/tico_config.h"
 #include <curl/curl.h>
 #include <thread>
 #include "rc_client.h"
@@ -1105,6 +1106,112 @@ void TicoCore::LogCallback(enum retro_log_level level, const char *fmt, ...)
 }
 
 //==============================================================================
+// Rumble
+//==============================================================================
+
+#ifdef __SWITCH__
+namespace
+{
+// The vibration motors of the controller a Dreamcast port reads, set up again
+// whenever another controller (or the same one held differently) takes it.
+struct RumblePad
+{
+    HidNpadIdType id = HidNpadIdType_No1;
+    u32 style = 0;
+    s32 count = 0;
+    HidVibrationDeviceHandle handles[2] = {};
+    HidVibrationValue values[2] = {};
+};
+RumblePad s_rumble[4];
+
+// The controller a port reads: player 1 is the handheld Joy-Con when no
+// controller is player 1, as the input does.
+bool RumbleTarget(unsigned port, HidNpadIdType &id, u32 &style)
+{
+    id = static_cast<HidNpadIdType>(HidNpadIdType_No1 + port);
+    u32 styles = hidGetNpadStyleSet(id);
+    if (port == 0 && !styles)
+    {
+        id = HidNpadIdType_Handheld;
+        styles = hidGetNpadStyleSet(id);
+    }
+    for (u32 tag : {(u32)HidNpadStyleTag_NpadHandheld, (u32)HidNpadStyleTag_NpadFullKey,
+                    (u32)HidNpadStyleTag_NpadJoyDual, (u32)HidNpadStyleTag_NpadJoyLeft,
+                    (u32)HidNpadStyleTag_NpadJoyRight})
+        if (styles & tag)
+        {
+            style = tag;
+            return true;
+        }
+    return false; // nothing there, or a controller without HD rumble
+}
+} // namespace
+#endif
+
+bool TicoCore::SetRumbleStateCallback(unsigned port, enum retro_rumble_effect effect, uint16_t strength)
+{
+#ifdef __SWITCH__
+    if (port >= 4)
+        return false;
+    HidNpadIdType id;
+    u32 style;
+    if (!RumbleTarget(port, id, style))
+        return false;
+    RumblePad &pad = s_rumble[port];
+    if (!pad.count || pad.id != id || pad.style != style)
+    {
+        pad = RumblePad();
+        const s32 count = (style == HidNpadStyleTag_NpadJoyLeft || style == HidNpadStyleTag_NpadJoyRight) ? 1 : 2;
+        if (R_FAILED(hidInitializeVibrationDevices(pad.handles, count, id, (HidNpadStyleTag)style)))
+            return false;
+        pad.id = id;
+        pad.style = style;
+        pad.count = count;
+        for (HidVibrationValue &value : pad.values)
+        {
+            value.freq_low = 160.0f;
+            value.freq_high = 320.0f;
+        }
+    }
+    // Input > Vibration and Vibration strength
+    float amplitude = 0.0f;
+    if (SwitchFrontend::TicoConfig::GetConfigValue("vibration", "enabled") != "disabled")
+    {
+        const int percent = std::clamp(
+            std::atoi(SwitchFrontend::TicoConfig::GetConfigValue("vibration_strength", "100").c_str()), 0, 100);
+        amplitude = (float)strength / 65535.0f * (float)percent / 100.0f;
+    }
+    for (s32 i = 0; i < pad.count; ++i)
+    {
+        if (effect == RETRO_RUMBLE_STRONG)
+            pad.values[i].amp_low = amplitude;
+        else if (effect == RETRO_RUMBLE_WEAK)
+            pad.values[i].amp_high = amplitude;
+    }
+    return R_SUCCEEDED(hidSendVibrationValues(pad.handles, pad.values, pad.count));
+#else
+    (void)port;
+    (void)effect;
+    (void)strength;
+    return false;
+#endif
+}
+
+void TicoCore::StopRumble()
+{
+#ifdef __SWITCH__
+    for (RumblePad &pad : s_rumble)
+    {
+        if (!pad.count)
+            continue;
+        for (HidVibrationValue &value : pad.values)
+            value.amp_low = value.amp_high = 0.0f;
+        hidSendVibrationValues(pad.handles, pad.values, pad.count);
+    }
+#endif
+}
+
+//==============================================================================
 // Instance Callbacks
 //==============================================================================
 
@@ -1278,6 +1385,13 @@ bool TicoCore::HandleEnvironment(unsigned cmd, void *data)
             m_fboHeight = newMaxH;
             ResizeFBO(m_fboWidth, m_fboHeight);
         }
+        return true;
+    }
+
+    case RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE:
+    {
+        auto *rumble = (retro_rumble_interface *)data;
+        rumble->set_rumble_state = SetRumbleStateCallback;
         return true;
     }
 

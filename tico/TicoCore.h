@@ -38,6 +38,10 @@ public:
     /// @brief Initialize the core
     bool Init();
 
+    /// @brief Stops every controller's vibration (the menu opened, or the
+    /// game closes mid-rumble).
+    static void StopRumble();
+
     /// @brief Load a game ROM
     bool LoadGame(const std::string &path);
 
@@ -142,6 +146,7 @@ private:
     static void InputPollCallback();
     static int16_t InputStateCallback(unsigned port, unsigned device, unsigned index, unsigned id);
     static void LogCallback(enum retro_log_level level, const char *fmt, ...);
+    static bool SetRumbleStateCallback(unsigned port, enum retro_rumble_effect effect, uint16_t strength);
 
     // Instance callbacks
     bool HandleEnvironment(unsigned cmd, void *data);

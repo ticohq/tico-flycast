@@ -194,5 +194,7 @@
     "emulator_pad_joycon_left": "Joy-Con (I)",
     "emulator_pad_joycon_right": "Joy-Con (D)",
     "emulator_pad_gamecube": "Mando de GameCube",
-    "emulator_pad_other": "Mando"
+    "emulator_pad_other": "Mando",
+    "settings_flycast_vibration": "Vibración",
+    "settings_flycast_vibration_strength": "Intensidad de vibración"
 }
