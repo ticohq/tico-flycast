@@ -928,6 +928,40 @@
               "label": "settings_flycast_digital_triggers",
               "type": "bool",
               "default": "disabled"
+            },
+            {
+              "key": "vibration",
+              "label": "settings_flycast_vibration",
+              "type": "bool",
+              "default": "enabled"
+            },
+            {
+              "key": "vibration_strength",
+              "label": "settings_flycast_vibration_strength",
+              "type": "enum",
+              "default": "100",
+              "choices": [
+                {
+                  "label": "25%",
+                  "value": "25"
+                },
+                {
+                  "label": "50%",
+                  "value": "50"
+                },
+                {
+                  "label": "75%",
+                  "value": "75"
+                },
+                {
+                  "label": "100%",
+                  "value": "100"
+                }
+              ],
+              "depends_on": {
+                "key": "vibration",
+                "value": "enabled"
+              }
             }
           ]
         },
