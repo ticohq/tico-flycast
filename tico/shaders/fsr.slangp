@@ -1,0 +1,25 @@
+# AMD FidelityFX Super Resolution 1.0: EASU upscales the game's picture to
+# the screen, RCAS sharpens it. From libretro/slang-shaders (1e0238f,
+# edge-smoothing/fsr), AMD's ffx_a.h and ffx_fsr1.h under their MIT licence.
+# Here: the sharpening pass sized to the screen (the size it gets anyway, no
+# extra pass after it) and no film grain by default.
+
+shaders = 2
+
+shader0 = fsr/fsr-pass0.slang
+filter_linear0 = true
+scale_type0 = viewport
+scale0 = 1.0
+wrap_mode0 = clamp_to_edge
+
+shader1 = fsr/fsr-pass1.slang
+filter_linear1 = true
+scale_type1 = viewport
+scale1 = 1.0
+wrap_mode1 = clamp_to_edge
+
+parameters = "FSR_SHARPENING;FSR_FILMGRAIN;FSR_GRAINCOLOR;FSR_GRAINPDF"
+FSR_SHARPENING = 0.3
+FSR_FILMGRAIN = 0.0
+FSR_GRAINCOLOR = 1.0
+FSR_GRAINPDF = 0.3

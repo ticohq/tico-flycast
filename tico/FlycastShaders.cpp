@@ -47,6 +47,7 @@ static const char *kUserShaderDir = "shaders/";
 // The built-ins, with the names the menu shows for them.
 static const std::pair<const char *, const char *> kBuiltinShaders[] = {
     {"crt-easymode.slangp", "CRT Easy Mode"},
+    {"fsr.slangp", "AMD FSR 1.0"},
 };
 
 static bool EndsWith(const std::string &s, const char *suffix)
