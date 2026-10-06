@@ -183,13 +183,20 @@ bool VkCreateDevice(retro_vulkan_context* context, VkInstance instance, VkPhysic
 		VulkanContext::provokingVertexSupported = tryAddDeviceExtension(vk::EXTProvokingVertexExtensionName);
 		VulkanContext::bufferDeviceAddressSupported = tryAddDeviceExtension(vk::KHRBufferDeviceAddressExtensionName);
 	}
+#ifdef __SWITCH__
+	// tico's frame generation (LSFG) synchronizes with timeline semaphores;
+	// the instance asks for Vulkan 1.1, so they come from the extension
+	const bool timelineSemaphoreSupported = getPhysicalDeviceProperties2Supported &&
+		tryAddDeviceExtension(vk::KHRTimelineSemaphoreExtensionName);
+#endif
 
 	// Get device features
 
 	vk::StructureChain<
 		vk::PhysicalDeviceFeatures2,
 		vk::PhysicalDeviceProvokingVertexFeaturesEXT,
-		vk::PhysicalDeviceBufferDeviceAddressFeaturesKHR
+		vk::PhysicalDeviceBufferDeviceAddressFeaturesKHR,
+		vk::PhysicalDeviceTimelineSemaphoreFeatures
 	> featuresChainHelper;
 
 	vk::PhysicalDeviceFeatures2& featuresChain = featuresChainHelper.get();
@@ -202,6 +209,11 @@ bool VkCreateDevice(retro_vulkan_context* context, VkInstance instance, VkPhysic
 	auto& bufferDeviceAddressFeatures = featuresChainHelper.get<vk::PhysicalDeviceBufferDeviceAddressFeaturesKHR>();
 	if (!VulkanContext::bufferDeviceAddressSupported)
 		featuresChainHelper.unlink<vk::PhysicalDeviceBufferDeviceAddressFeaturesKHR>();
+
+#ifdef __SWITCH__
+	if (!timelineSemaphoreSupported)
+#endif
+		featuresChainHelper.unlink<vk::PhysicalDeviceTimelineSemaphoreFeatures>();
 
 	// Get the physical device's features
 	if (getPhysicalDeviceProperties2Supported && featuresChain.pNext)

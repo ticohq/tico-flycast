@@ -39,10 +39,13 @@ bool CreateDeviceAndSwapchain();
 // Tear everything down. Safe to call from anywhere.
 void Shutdown();
 
-// Acquire the next swapchain image. Returns true on success; on false the
-// caller should skip the frame (typically after OOD swapchain — recreated
-// internally on the next call).
+// Start a frame: waits for its slot and begins its command buffer (the swap
+// image is acquired in EndFrame). False when Vulkan is not ready.
 bool BeginFrame();
+
+/// The core reported that this run made no new frame (a 30 fps game's
+/// repeated one); with frame generation on it is not presented.
+void MarkRepeatedFrame();
 
 // Composite the core's `set_image` result onto the current swap image,
 // submit, and present. Always paired with BeginFrame().

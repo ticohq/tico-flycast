@@ -129,5 +129,9 @@
     "emulator_pad_gamecube": "GameCube-Controller",
     "emulator_pad_other": "Controller",
     "settings_flycast_vibration": "Vibration",
-    "settings_flycast_vibration_strength": "Vibrationsstärke"
+    "settings_flycast_vibration_strength": "Vibrationsstärke",
+    "settings_flycast_section_frame_generation": "Bildgenerierung",
+    "settings_flycast_lsfg": "Bildgenerierung (LSFG)",
+    "settings_flycast_lsfg_flow_scale": "Bewegungsschätzung (Skalierung)",
+    "settings_flycast_lsfg_performance_mode": "Performance-Shader"
 }

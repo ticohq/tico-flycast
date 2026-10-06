@@ -262,6 +262,47 @@
           ]
         },
         {
+          "title": "settings_flycast_section_frame_generation",
+          "options": [
+            {
+              "key": "lsfg_enabled",
+              "label": "settings_flycast_lsfg",
+              "type": "bool",
+              "default": "disabled"
+            },
+            {
+              "key": "lsfg_flow_scale",
+              "label": "settings_flycast_lsfg_flow_scale",
+              "type": "enum",
+              "default": "0.25",
+              "depends_on": {
+                "key": "lsfg_enabled",
+                "value": "enabled"
+              },
+              "choices": [
+                {
+                  "label": "25%",
+                  "value": "0.25"
+                },
+                {
+                  "label": "50%",
+                  "value": "0.5"
+                }
+              ]
+            },
+            {
+              "key": "lsfg_performance_mode",
+              "label": "settings_flycast_lsfg_performance_mode",
+              "type": "bool",
+              "default": "enabled",
+              "depends_on": {
+                "key": "lsfg_enabled",
+                "value": "enabled"
+              }
+            }
+          ]
+        },
+        {
           "title": "settings_flycast_section_rendering",
           "options": [
             {

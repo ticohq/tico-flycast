@@ -129,5 +129,9 @@
     "emulator_pad_gamecube": "Контроллер GameCube",
     "emulator_pad_other": "Контроллер",
     "settings_flycast_vibration": "Вибрация",
-    "settings_flycast_vibration_strength": "Сила вибрации"
+    "settings_flycast_vibration_strength": "Сила вибрации",
+    "settings_flycast_section_frame_generation": "Генерация кадров",
+    "settings_flycast_lsfg": "Генерация кадров (LSFG)",
+    "settings_flycast_lsfg_flow_scale": "Масштаб оценки движения",
+    "settings_flycast_lsfg_performance_mode": "Шейдеры производительности"
 }

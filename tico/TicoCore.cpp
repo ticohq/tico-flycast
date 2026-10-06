@@ -1457,6 +1457,13 @@ void TicoCore::HandleVideoRefresh(const void *data, unsigned width,
     // TicoVulkan knows the source extent for the swapchain blit.
     if (!data && !m_hwRender)
         return;
+    if (!data)
+    {
+        // the core ran but drew nothing new (RETRO_HW_FRAME_BUFFER_VALID
+        // would say it did)
+        TicoVulkan::MarkRepeatedFrame();
+        return;
+    }
     m_frameWidth = width;
     m_frameHeight = height;
     TicoVulkan::SetSourceExtent(width, height);
