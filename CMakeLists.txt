@@ -217,6 +217,7 @@ if(NINTENDO_SWITCH)
 				tico/FlycastShaders.cpp
 				tico/TicoShaderChain.cpp
 				tico/TicoSlang.cpp
+				tico/TicoLsfg.cpp
 				tico/deps/SPIRV-Reflect/spirv_reflect.c
 				tico/UsbStorage.cpp
 				tico/overlay/imgui_overlay.cpp
@@ -241,6 +242,29 @@ if(NINTENDO_SWITCH)
 				PROPERTIES COMPILE_OPTIONS "-UVK_NO_PROTOTYPES")
 			set_source_files_properties(tico/TicoShaderChain.cpp
 				PROPERTIES COMPILE_DEFINITIONS TICO_STB_IMAGE_WRITE_EXTERNAL)
+
+			# Frame generation (LSFG): tico/deps/LSFG-VK, which reads Lossless
+			# Scaling's shaders from the user's Lossless.dll at runtime. It
+			# reaches Vulkan through the frontend's vkGetInstanceProcAddr.
+			set(TICO_LSFG ${CMAKE_CURRENT_SOURCE_DIR}/tico/deps/LSFG-VK)
+			file(GLOB TICO_LSFG_SOURCES
+				${TICO_LSFG}/bridge/lsfg_bridge.cpp
+				${TICO_LSFG}/lsfg-vk-common/src/helpers/*.cpp
+				${TICO_LSFG}/lsfg-vk-common/src/vulkan/*.cpp
+				${TICO_LSFG}/lsfg-vk-backend/src/*.cpp
+				${TICO_LSFG}/lsfg-vk-backend/src/extraction/*.cpp
+				${TICO_LSFG}/lsfg-vk-backend/src/helpers/*.cpp
+				${TICO_LSFG}/lsfg-vk-backend/src/shaderchains/*.cpp)
+			add_library(tico_lsfg STATIC ${TICO_LSFG_SOURCES})
+			target_include_directories(tico_lsfg PUBLIC ${TICO_LSFG}/bridge)
+			target_include_directories(tico_lsfg PRIVATE
+				${TICO_LSFG}/lsfg-vk-common/include ${TICO_LSFG}/lsfg-vk-backend/include
+				${TICO_LSFG}/lsfg-vk-backend/src)
+			target_include_directories(tico_lsfg BEFORE PRIVATE core/deps/Vulkan-Headers/include)
+			target_compile_options(tico_lsfg PRIVATE -fexceptions -frtti)
+			target_compile_definitions(tico_lsfg PRIVATE USE_VULKAN=1 VK_NO_PROTOTYPES=1)
+			set_target_properties(tico_lsfg PROPERTIES CXX_STANDARD 20)
+			target_link_libraries(${PROJECT_NAME} PRIVATE tico_lsfg)
 
 			# SDL2 for Switch (provided by devkitPro). Used for audio +
 			# gamecontroller; we no longer create an SDL window.

@@ -16,6 +16,7 @@
 
 #include "TicoVulkan.h"
 #include "TicoLogger.h"
+#include "TicoLsfg.h"
 
 #include "imgui.h"
 #include "imgui_impl_vulkan.h"
@@ -96,6 +97,7 @@ std::vector<PerFrame> s_frames;
 uint32_t            s_currentFrame = 0;   // rotating frame slot (== libretro sync_index)
 uint32_t            s_currentImage = 0;   // current swap image returned by acquire
 bool                s_frameInFlight = false;
+bool                s_repeatedFrame = false; // the core reported no new frame this run
 bool                s_ready = false;
 bool                s_overlayReady = false;
 vk::DescriptorPool s_overlayDescriptorPool;
@@ -576,6 +578,32 @@ bool CreateSwapchainInternal()
     if (caps.maxImageCount != 0)
         imageCount = std::min(imageCount, caps.maxImageCount);
 
+    // TRANSFER_DST so we can blit core's image onto it.
+    vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eColorAttachment |
+                                vk::ImageUsageFlagBits::eTransferDst;
+    const uint32_t plainImageCount = imageCount;
+    const vk::ImageUsageFlags plainUsage = usage;
+    // Frame generation copies the game's frame out of the image and its own
+    // in, and presents one more image per frame: two more images hold them.
+    if (TicoLsfg::IsPrepared())
+    {
+        const auto props = s_gpu.getFormatProperties(fmt.format);
+        const vk::FormatFeatureFlags transfer = vk::FormatFeatureFlagBits::eTransferSrc |
+                                                vk::FormatFeatureFlagBits::eTransferDst;
+        if (!(caps.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferSrc) ||
+            (props.optimalTilingFeatures & transfer) != transfer)
+        {
+            TicoLsfg::Disable("the swapchain's images cannot be copied");
+        }
+        else
+        {
+            usage |= vk::ImageUsageFlagBits::eTransferSrc;
+            imageCount += 2;
+            if (caps.maxImageCount != 0)
+                imageCount = std::min(imageCount, caps.maxImageCount);
+        }
+    }
+
     vk::SwapchainCreateInfoKHR sci;
     sci.surface = s_surface;
     sci.minImageCount = imageCount;
@@ -583,9 +611,7 @@ bool CreateSwapchainInternal()
     sci.imageColorSpace = fmt.colorSpace;
     sci.imageExtent = s_swapExtent;
     sci.imageArrayLayers = 1;
-    // TRANSFER_DST so we can blit core's image onto it.
-    sci.imageUsage = vk::ImageUsageFlagBits::eColorAttachment |
-                     vk::ImageUsageFlagBits::eTransferDst;
+    sci.imageUsage = usage;
     sci.imageSharingMode = vk::SharingMode::eExclusive;
     sci.preTransform = caps.currentTransform;
     sci.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
@@ -598,8 +624,24 @@ bool CreateSwapchainInternal()
     }
     catch (const vk::SystemError& e)
     {
-        VK_LOG_ERROR("vkCreateSwapchainKHR failed: %s", e.what());
-        return false;
+        if (!TicoLsfg::IsPrepared())
+        {
+            VK_LOG_ERROR("vkCreateSwapchainKHR failed: %s", e.what());
+            return false;
+        }
+        // the driver will not make it ready for frame generation: a plain one
+        TicoLsfg::Disable("the driver rejected the swapchain it needs");
+        sci.minImageCount = plainImageCount;
+        sci.imageUsage = plainUsage;
+        try
+        {
+            s_swapchain = s_device.createSwapchainKHR(sci);
+        }
+        catch (const vk::SystemError& e2)
+        {
+            VK_LOG_ERROR("vkCreateSwapchainKHR failed: %s", e2.what());
+            return false;
+        }
     }
 
     s_swapImages = s_device.getSwapchainImagesKHR(s_swapchain);
@@ -613,6 +655,19 @@ bool CreateSwapchainInternal()
         vci.components = vk::ComponentMapping();
         vci.subresourceRange = vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
         s_swapImageViews[i] = s_device.createImageView(vci);
+    }
+
+    if (TicoLsfg::IsPrepared())
+    {
+        std::vector<VkImage> images(s_swapImages.begin(), s_swapImages.end());
+        TicoLsfg::Device device;
+        device.instance = static_cast<VkInstance>(s_instance);
+        device.gpu = static_cast<VkPhysicalDevice>(s_gpu);
+        device.device = static_cast<VkDevice>(s_device);
+        device.queueFamily = s_queueFamilyIndex;
+        device.getInstanceProcAddr = GetInstanceProcAddrFunc();
+        TicoLsfg::RegisterSwapchain(device, static_cast<VkSwapchainKHR>(s_swapchain),
+                                    static_cast<VkExtent2D>(s_swapExtent), images);
     }
 
     VK_LOG_INFO("Swapchain: %ux%u format=%d images=%zu",
@@ -694,6 +749,10 @@ bool CreateInstance()
 
 bool CreateDeviceAndSwapchain()
 {
+    // frame generation, when Lossless.dll is installed: the device (timeline
+    // semaphores, enabled by the core's create_device) and the swapchain are
+    // made ready for it, so it can be switched on in game
+    TicoLsfg::Prepare();
     if (!CreateDeviceInternal())
         return false;
     if (!CreateSwapchainInternal())
@@ -713,6 +772,7 @@ void Shutdown()
     {
         try { s_device.waitIdle(); } catch (...) {}
     }
+    TicoLsfg::UnregisterSwapchain();
 
     ShutdownOverlayRendererInternal();
     s_gameFilter = nullptr;
@@ -773,25 +833,9 @@ bool BeginFrame()
     s_device.resetFences(f.inflightFence);
     RunDeferred(false);
 
-    try
-    {
-        auto rv = s_device.acquireNextImageKHR(s_swapchain, UINT64_MAX,
-                                               f.acquireSemaphore, VK_NULL_HANDLE);
-        s_currentImage = rv.value;
-        if (rv.result == vk::Result::eSuboptimalKHR)
-            VK_LOG_WARN("acquireNextImage suboptimal");
-    }
-    catch (const vk::OutOfDateKHRError&)
-    {
-        VK_LOG_WARN("acquireNextImage OUT_OF_DATE — TODO recreate swapchain");
-        return false;
-    }
-    catch (const vk::SystemError& e)
-    {
-        VK_LOG_ERROR("acquireNextImage failed: %s", e.what());
-        return false;
-    }
-
+    // The swap image is acquired in EndFrame, once it is known whether this
+    // frame is presented at all.
+    s_repeatedFrame = false;
     f.imageValid = false;
     f.coreCommandBuffers.clear();
     f.signalSemaphore = VK_NULL_HANDLE;
@@ -804,12 +848,86 @@ bool BeginFrame()
     return true;
 }
 
+namespace
+{
+
+bool AcquireSwapImage(PerFrame& f)
+{
+    try
+    {
+        auto rv = s_device.acquireNextImageKHR(s_swapchain, UINT64_MAX,
+                                               f.acquireSemaphore, VK_NULL_HANDLE);
+        s_currentImage = rv.value;
+        if (rv.result == vk::Result::eSuboptimalKHR)
+            VK_LOG_WARN("acquireNextImage suboptimal");
+        return true;
+    }
+    catch (const vk::OutOfDateKHRError&)
+    {
+        VK_LOG_WARN("acquireNextImage OUT_OF_DATE — TODO recreate swapchain");
+    }
+    catch (const vk::SystemError& e)
+    {
+        VK_LOG_ERROR("acquireNextImage failed: %s", e.what());
+    }
+    return false;
+}
+
+// The frame's work (the core's command buffers) goes to the GPU, nothing to
+// the screen; its fence still signals, so the slot can be used again.
+void SubmitWithoutPresent(PerFrame& f)
+{
+    s_overlayDrawData = nullptr;
+    f.cmd.end();
+
+    std::vector<vk::CommandBuffer> submitCmds;
+    submitCmds.reserve(f.coreCommandBuffers.size() + 1);
+    for (auto& cb : f.coreCommandBuffers)
+        submitCmds.push_back(cb);
+    submitCmds.push_back(f.cmd);
+
+    vk::Semaphore signal(f.signalSemaphore);
+    vk::SubmitInfo submit;
+    submit.commandBufferCount = static_cast<uint32_t>(submitCmds.size());
+    submit.pCommandBuffers = submitCmds.data();
+    if (signal)
+    {
+        submit.signalSemaphoreCount = 1;
+        submit.pSignalSemaphores = &signal;
+    }
+    {
+        std::lock_guard<std::mutex> guard(s_queueMutex);
+        s_queue.submit(submit, f.inflightFence);
+    }
+
+    s_frameInFlight = false;
+    s_frameSerial++;
+    s_currentFrame = (s_currentFrame + 1) % static_cast<uint32_t>(s_frames.size());
+}
+
+} // namespace
+
+void MarkRepeatedFrame()
+{
+    s_repeatedFrame = true;
+}
+
 void EndFrame()
 {
     if (!s_frameInFlight)
         return;
 
     PerFrame& f = s_frames[s_currentFrame];
+
+    // With frame generation on, a frame the core only repeated is not shown:
+    // a 30 fps game then presents its 30 distinct frames, and a generated one
+    // goes between each two.
+    if ((s_repeatedFrame && TicoLsfg::SkipsRepeatedFrames()) || !AcquireSwapImage(f))
+    {
+        SubmitWithoutPresent(f);
+        return;
+    }
+
     vk::Image swapImage = s_swapImages[s_currentImage];
 
     // Transition swap image to TRANSFER_DST regardless — even if the core
@@ -1018,7 +1136,19 @@ void EndFrame()
     try
     {
         std::lock_guard<std::mutex> guard(s_queueMutex);
-        (void)s_queue.presentKHR(present);
+        VkResult lsfgResult = VK_SUCCESS;
+        if (TicoLsfg::Present(static_cast<VkQueue>(s_queue), static_cast<const VkPresentInfoKHR&>(present),
+                              lsfgResult))
+        {
+            if (lsfgResult == VK_ERROR_OUT_OF_DATE_KHR)
+                VK_LOG_WARN("presentKHR OUT_OF_DATE — TODO recreate swapchain");
+            else if (lsfgResult != VK_SUCCESS && lsfgResult != VK_SUBOPTIMAL_KHR)
+                VK_LOG_ERROR("presentKHR failed: %d", static_cast<int>(lsfgResult));
+        }
+        else
+        {
+            (void)s_queue.presentKHR(present);
+        }
     }
     catch (const vk::OutOfDateKHRError&)
     {

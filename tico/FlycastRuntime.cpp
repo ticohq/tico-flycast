@@ -16,6 +16,7 @@
 #include "TicoConfig.h"
 #include "TicoCore.h"
 #include "TicoLogger.h"
+#include "TicoLsfg.h"
 #include "TicoOverlayHost.h"
 #include "TicoVulkan.h"
 #include "overlay/imgui_overlay.h"
@@ -1006,6 +1007,10 @@ void FlycastRuntime::RunFrame()
 {
     UpdateScreenMode();
     FlycastShaders::Update(); // a preset compiles outside the frame
+    // Display > Frame Generation, applied in game
+    TicoLsfg::SetOptions(OverlayConfig::GetConfigValue("lsfg_enabled", "disabled") == "enabled",
+                         OverlayConfig::GetConfigValue("lsfg_flow_scale", "0.25") == "0.5" ? 0.5f : 0.25f,
+                         OverlayConfig::GetConfigValue("lsfg_performance_mode", "enabled") == "enabled");
     frameInFlight_ = TicoVulkan::BeginFrame();
     if (frameInFlight_ && core_)
     {
