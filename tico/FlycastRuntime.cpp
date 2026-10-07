@@ -80,12 +80,37 @@ public:
         uint32_t w = 0, h = 0;
         if (TicoVulkan::CaptureGameImage(256, 192, rgba, w, h))
             stbi_write_png((path + ".png").c_str(), (int)w, (int)h, 4, rgba.data(), (int)w * 4);
+        // which disc was in: a game's discs can share its states (an .m3u's do, and
+        // a disc swapped to in game saves under the name it booted with)
+        if (FILE *disc = std::fopen((path + ".disc").c_str(), "wb"))
+        {
+            const std::string current = NormalizeDiscPath(core_->CurrentDiscPath());
+            std::fwrite(current.data(), 1, current.size(), disc);
+            std::fclose(disc);
+        }
     }
 
     std::string SlotStatePath(int slot) const { return StatePath(slot); }
     void LoadStateSlot(int slot) override
     {
-        if (core_) core_->LoadState(StatePath(slot));
+        if (!core_)
+            return;
+        // a state made with another disc in gets that disc first
+        const std::string path = StatePath(slot);
+        if (FILE *file = std::fopen((path + ".disc").c_str(), "rb"))
+        {
+            char buffer[1024] = {0};
+            const size_t length = std::fread(buffer, 1, sizeof(buffer) - 1, file);
+            std::fclose(file);
+            const std::string disc(buffer, length);
+            struct stat st;
+            if (!disc.empty() && disc != NormalizeDiscPath(core_->CurrentDiscPath()) &&
+                stat(disc.c_str(), &st) == 0)
+            {
+                core_->InsertDiscNow(disc);
+            }
+        }
+        core_->LoadState(path);
     }
     void SwapDisc(const std::string &path) override
     {

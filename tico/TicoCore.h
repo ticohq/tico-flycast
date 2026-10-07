@@ -88,6 +88,9 @@ public:
     unsigned GetCurrentDiskIndex() const;
     bool SwapDisk(unsigned index);
     bool SwapDiskByPath(const std::string &discPath);
+    // Puts this disc in at once, without the eject and the wait (e.g. right
+    // before loading a state made with it in).
+    bool InsertDiscNow(const std::string &discPath);
     /// @brief The disc in the drive (or about to go in), else the game's path
     std::string CurrentDiscPath() const;
     /// @brief A swap is waiting for its delayed insert
