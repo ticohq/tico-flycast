@@ -1748,6 +1748,28 @@ bool TicoCore::SwapDiskByPath(const std::string &discPath)
     return true;
 }
 
+bool TicoCore::InsertDiscNow(const std::string &discPath)
+{
+    if (!m_hasDiskControl || !m_diskControl.set_eject_state ||
+        !m_diskControl.replace_image_index || !m_diskControl.set_image_index)
+    {
+        return false;
+    }
+    m_swapPending = false;
+    if (!m_diskControl.set_eject_state(true))
+        return false;
+    // as the delayed swap: a disc the core lists is selected, any other replaces the one in
+    const int listed = FindDiscIndex(discPath);
+    const unsigned index = listed >= 0 ? (unsigned)listed
+                         : m_diskControl.get_image_index ? m_diskControl.get_image_index() : 0;
+    retro_game_info info = {discPath.c_str(), nullptr, 0, ""};
+    const bool inserted = (listed >= 0 || m_diskControl.replace_image_index(index, &info)) &&
+                          m_diskControl.set_image_index(index);
+    m_diskControl.set_eject_state(false);
+    LOG_CORE("InsertDiscNow %s: %s", discPath.c_str(), inserted ? "ok" : "failed");
+    return inserted;
+}
+
 // The core's index for the disc at @p path, or -1 when it does not list it.
 int TicoCore::FindDiscIndex(const std::string &path) const
 {
