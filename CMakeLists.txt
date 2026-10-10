@@ -279,7 +279,7 @@ if(NINTENDO_SWITCH)
 			target_link_libraries(${PROJECT_NAME} PRIVATE
 				${CMAKE_CURRENT_SOURCE_DIR}/tico/deps/usbhsfs/lib/libusbhsfs.a
 				${CMAKE_CURRENT_SOURCE_DIR}/tico/deps/usbhsfs/lib/libusbntfs.a)
-			target_link_libraries(${PROJECT_NAME} PRIVATE -lcurl -lSDL2_mixer -lmpg123 -lmodplug -lopusfile -lopus -lvorbisidec -logg SDL2)
+			target_link_libraries(${PROJECT_NAME} PRIVATE -lcurl -lsodium -lSDL2_mixer -lmpg123 -lmodplug -lopusfile -lopus -lvorbisidec -logg SDL2)
 
 			# NVK (loaderless libvulkan + nouveau DRM) - replaces the EGL/GL
 			# Mesa stack. Matches dolphin's standalone NRO build.

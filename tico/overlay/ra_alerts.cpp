@@ -36,8 +36,13 @@ void ResolveNotificationTextures(IOverlayHost* host) {
         } else {
             // Only check the in-memory texture cache — NO disk I/O, NO stbi_load.
             ImTextureID t = ra->BadgeTexture(n.badge_name);
-            if (t != 0)
+            if (t != 0) {
                 n.textureId = t;
+            } else if (n.timer > 0.3f) {
+                // tico has not cached this badge (or fetching is off): placeholder.
+                n.badge_name = "ra_icon";
+                n.textureId = ra->IconTexture();
+            }
             // If not cached yet, leave textureId=0; the badge appears once the
             // host uploads it (next frame).
         }
