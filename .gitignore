@@ -26,3 +26,6 @@ build_tico_standalone
 tico-flycast-standalone.nro
 flycast.nro
 tico-*-module.zip
+
+# TicoSecure build secret (shared with tico)
+/tico/TicoSecret.h

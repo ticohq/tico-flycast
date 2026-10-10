@@ -236,8 +236,7 @@ public:
     ImTextureID m_raIconTexture = 0;         // ra.svg icon
     void* m_raHashDisc = nullptr;            // Pre-opened Disc* for RA hashing (avoids concurrent file access)
     ImTextureID GetRABadgeTexture(const std::string& badge_name);
-    void DownloadAndCacheBadge(const std::string& badge_name, bool execute_now = false); // runs on worker
-    void PreloadRABadges();                   // called after game identification
+    void LoadCachedBadge(const std::string& badge_name); // From tico's badge cache, if there
     std::vector<std::pair<std::string, std::vector<unsigned char>>> m_raPendingBadgeUploads;
     std::mutex m_raBadgeUploadMutex;
     void ProcessPendingBadgeUploads();        // called from main thread (RunFrame)
