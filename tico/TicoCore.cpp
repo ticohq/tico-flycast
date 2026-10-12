@@ -797,6 +797,7 @@ void TicoCore::UnloadGame()
 
     // (VMU/flash persisted by retro_unload_game; no manual SRAM save.)
     DestroyHWContext();
+    tico::PlaytimeFlush(); // the game's last seconds
     retro_unload_game();
     m_gameLoaded = false;
 }
@@ -854,6 +855,7 @@ void TicoCore::RunFrame()
     }
 
     retro_run();
+    tico::PlaytimeFrame(); // this frame's time to the player's playtime
 
     if (m_rcClient && m_gameLoaded) {
         rc_client_do_frame(m_rcClient);
