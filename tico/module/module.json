@@ -46,6 +46,7 @@
     },
     {
       "slug": "naomi",
+      "naming": "arcade",
       "title": "Naomi",
       "extensions": [
         ".zip",
@@ -87,6 +88,7 @@
     },
     {
       "slug": "atomiswave",
+      "naming": "arcade",
       "title": "Atomiswave",
       "extensions": [
         ".zip",
