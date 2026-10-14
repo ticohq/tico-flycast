@@ -23,7 +23,7 @@
       ],
       "disc_based": true,
       "naming": "redump",
-      "games_file": "dreamcast.json",
+      "games_file": "dreamcast.dat",
       "retroachievements_id": 23,
       "bios": [
         {
@@ -70,7 +70,7 @@
       "title_rules": {
         "articles": "keep"
       },
-      "games_file": "naomi.json",
+      "games_file": "naomi.dat",
       "retroachievements_id": 27,
       "colors": {
         "start": "1FA6E6",
@@ -112,7 +112,7 @@
       "title_rules": {
         "articles": "keep"
       },
-      "games_file": "atomiswave.json",
+      "games_file": "atomiswave.dat",
       "retroachievements_id": 27,
       "colors": {
         "start": "E6743C",
