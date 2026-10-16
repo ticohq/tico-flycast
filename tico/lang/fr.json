@@ -200,5 +200,6 @@
     "emulator_pad_gamecube": "Manette GameCube",
     "emulator_pad_other": "Manette",
     "settings_flycast_vibration": "Vibration",
-    "settings_flycast_vibration_strength": "Intensité des vibrations"
+    "settings_flycast_vibration_strength": "Intensité des vibrations",
+    "emulator_quick_menu_tip": "Appuyez sur {plus} et {minus} ensemble pour ouvrir le menu rapide"
 }
