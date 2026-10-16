@@ -133,5 +133,6 @@
     "settings_flycast_section_frame_generation": "Генерация кадров",
     "settings_flycast_lsfg": "Генерация кадров (LSFG)",
     "settings_flycast_lsfg_flow_scale": "Масштаб оценки движения",
-    "settings_flycast_lsfg_performance_mode": "Шейдеры производительности"
+    "settings_flycast_lsfg_performance_mode": "Шейдеры производительности",
+    "emulator_quick_menu_tip": "Нажмите {plus} и {minus} вместе, чтобы открыть быстрое меню"
 }

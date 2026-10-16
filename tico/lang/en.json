@@ -200,5 +200,6 @@
     "emulator_pad_gamecube": "GameCube controller",
     "emulator_pad_other": "Controller",
     "settings_flycast_vibration": "Vibration",
-    "settings_flycast_vibration_strength": "Vibration strength"
+    "settings_flycast_vibration_strength": "Vibration strength",
+    "emulator_quick_menu_tip": "Press {plus} and {minus} together to open the quick menu"
 }

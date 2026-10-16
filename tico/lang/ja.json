@@ -200,5 +200,6 @@
     "emulator_pad_gamecube": "ゲームキューブコントローラー",
     "emulator_pad_other": "コントローラー",
     "settings_flycast_vibration": "振動",
-    "settings_flycast_vibration_strength": "振動の強さ"
+    "settings_flycast_vibration_strength": "振動の強さ",
+    "emulator_quick_menu_tip": "{plus}と{minus}を同時に押すとクイックメニューが開きます"
 }

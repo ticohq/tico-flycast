@@ -1054,6 +1054,8 @@ void FlycastRuntime::OfferResume()
         return;
     if (std::remove(RestartMarkerPath().c_str()) == 0)
         return;
+    // tico's General > Quick Menu Tip: shown once the game runs smoothly
+    OverlayUI::ShowQuickMenuTip();
     if (core_->IsHardcoreActive() ||
         !overlayHost_->StateSlotExists(OverlayUI::kAutoStateSlot - 1))
         return;
