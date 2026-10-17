@@ -4,6 +4,7 @@
 /// the generic Tico::Main driver.
 
 #include "FlycastRuntime.h"
+#include "TicoSession.h"
 #include "TicoLogger.h"
 #include "TicoMain.h"
 
@@ -21,6 +22,8 @@ extern "C"
 
 int main(int argc, char *argv[])
 {
+    // Mesa's shader cache beside this core's files, not at the SD card's root
+    tico::UseShaderCacheDir("sdmc:/tico/system/flycast/cache/mesa");
     // Route the agnostic layer's log lines through the project macro logger.
     Tico::LogCallback log = [](const std::string &line) {
         LOG_INFO("HOME", "%s", line.c_str());
